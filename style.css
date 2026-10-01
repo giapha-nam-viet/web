@@ -1,9 +1,8 @@
 /* ============================================
-   GIA PHẢ NAM VIỆT - STYLESHEET
-   Bảng màu: Navy + Vàng đất + Kem
+   GIA PHẢ NAM VIỆT - STYLESHEET (v1.1)
+   Đã sửa: Menu tab theo màu mới
    ============================================ */
 
-/* ===== BIẾN MÀU ===== */
 :root {
   --bg-main:        #F5EEB3;
   --bg-card:        #FFFFFF;
@@ -32,7 +31,6 @@
   --container-max:  1440px;
 }
 
-/* ===== RESET ===== */
 * {
   margin: 0;
   padding: 0;
@@ -102,7 +100,7 @@ body {
   }
 }
 
-/* ===== TABS ===== */
+/* ===== TABS — ĐÃ SỬA THEO YÊU CẦU ===== */
 .tabs {
   background: var(--bg-menu);
   border-bottom: 2px solid var(--border);
@@ -116,8 +114,9 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
+/* Nút tab không active — nền kem #F5EEB3 */
 .tab {
-  background: transparent;
+  background: #F5EEB3;
   border: none;
   padding: 14px 24px;
   font-family: inherit;
@@ -130,15 +129,23 @@ body {
   white-space: nowrap;
 }
 
+/* Hover — đậm hơn chút */
 .tab:hover {
-  background: var(--bg-hover);
+  background: #E8DCA0;
   color: var(--accent-dark);
 }
 
+/* Tab đang active — nền vàng đậm #C49504 */
 .tab--active {
-  color: var(--accent-dark);
-  border-bottom-color: var(--accent);
-  background: var(--bg-hover);
+  background: #C49504;
+  color: #FFFFFF;
+  font-weight: 700;
+  border-bottom-color: #8B6D00;
+}
+
+.tab--active:hover {
+  background: #C49504;
+  color: #FFFFFF;
 }
 
 /* ===== MAIN ===== */
