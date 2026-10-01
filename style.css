@@ -1,12 +1,12 @@
 /* ============================================
-   GIA PHẢ NAM VIỆT - STYLESHEET (v1.2)
-   Đã sửa: Menu gom gọn giữa màn hình trên desktop
+   GIA PHẢ NAM VIỆT - STYLESHEET (v1.4)
+   Menu tràn 100% chiều rộng màn hình
    ============================================ */
 
 :root {
   --bg-main:        #F5EEB3;
   --bg-card:        #FFFFFF;
-  --bg-menu:        #FFFFFF;
+  --bg-menu:        #F5EEB3;
   --bg-hover:       #E8DCA0;
   
   --text-main:      #01285E;
@@ -100,34 +100,40 @@ body {
   }
 }
 
-/* ===== TABS — GOM GỌN GIỮA MÀN HÌNH ===== */
+/* ===== TABS — TRÀN 100% CHIỀU RỘNG ===== */
 .tabs {
   background: var(--bg-menu);
   border-bottom: 2px solid var(--border);
   display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
+  justify-content: stretch;
+  flex-wrap: nowrap;
   gap: 0;
   position: sticky;
   top: 60px;
   z-index: 99;
   box-shadow: var(--shadow-sm);
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
-/* Nút tab — không active: nền kem */
 .tab {
   background: #F5EEB3;
   border: none;
-  padding: 14px 32px;
+  padding: 16px 20px;
   font-family: inherit;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--text-main);
   cursor: pointer;
   transition: all 0.2s ease;
   border-bottom: 3px solid transparent;
   white-space: nowrap;
-  flex: 0 0 auto;
+  flex: 1 1 25%;
+  width: 25%;
+  min-width: 0;
+  text-align: center;
 }
 
 .tab:hover {
@@ -135,7 +141,6 @@ body {
   color: var(--accent-dark);
 }
 
-/* Tab active — nền vàng đậm */
 .tab--active {
   background: #C49504;
   color: #FFFFFF;
@@ -460,8 +465,8 @@ body {
   }
   
   .tab {
-    padding: 12px 20px;
-    font-size: 14px;
+    padding: 12px 8px;
+    font-size: 13px;
   }
   
   .main {
@@ -488,10 +493,8 @@ body {
 
 @media (max-width: 480px) {
   .tab {
-    padding: 10px 12px;
-    font-size: 13px;
-    flex: 1 1 auto;
-    min-width: 80px;
+    padding: 12px 4px;
+    font-size: 12px;
   }
   
   .logo__text {
