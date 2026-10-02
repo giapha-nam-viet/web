@@ -41,31 +41,23 @@
   <!-- TAB TRANG CHỦ -->
   <section class="tab-content" id="tab-trang-chu">
     <div class="banner">
-      <img src="https://giapha-nam-viet.github.io/assets/bannertrang%20chu.png" 
-           alt="Banner Trang chủ" onerror="this.style.display='none'">
+      <img src="https://giapha-nam-viet.github.io/assets/bannertrang%20chu.png" alt="Banner Trang chủ" onerror="this.style.display='none'">
       <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="openPersonForm()">+</button>
     </div>
-    
     <div class="card">
       <h2 class="card__title">LỜI TỰA</h2>
-      <div class="card__body" id="loiTua">
-        <p><em>Đang tải...</em></p>
-      </div>
+      <div class="card__body" id="loiTua"><p><em>Đang tải...</em></p></div>
     </div>
-    
     <div class="card">
       <h2 class="card__title">HƯỚNG DẪN SỬ DỤNG</h2>
-      <div class="card__body" id="huongDan">
-        <p><em>Đang tải...</em></p>
-      </div>
+      <div class="card__body" id="huongDan"><p><em>Đang tải...</em></p></div>
     </div>
   </section>
 
   <!-- TAB DANH TÍNH -->
   <section class="tab-content" id="tab-danh-tinh" style="display:none">
     <div class="banner">
-      <img src="https://giapha-nam-viet.github.io/assets/bannerdanhtinh.png" 
-           alt="Banner Danh tính" onerror="this.style.display='none'">
+      <img src="https://giapha-nam-viet.github.io/assets/bannerdanhtinh.png" alt="Banner Danh tính" onerror="this.style.display='none'">
       <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="openPersonForm()">+</button>
     </div>
     
@@ -82,44 +74,38 @@
       <div class="sub-tabs__group">
         <span class="sub-tabs__label">Chi:</span>
         <button class="sub-tab sub-tab--active" data-filter-type="branch" data-filter-value="">Tất cả</button>
-        <button class="sub-tab" data-filter-type="branch" data-filter-value="Chi Phạm Văn Mỹ">Phạm Văn Mỹ</button>
-        <button class="sub-tab" data-filter-type="branch" data-filter-value="Chi Phạm Thị Lâm">Phạm Thị Lâm</button>
-        <button class="sub-tab" data-filter-type="branch" data-filter-value="Chi Phạm Văn Thư">Phạm Văn Thư</button>
+        <button class="sub-tab" data-filter-type="branch" data-filter-value="Phạm Thị Lâm">Phạm Thị Lâm</button>
+        <button class="sub-tab" data-filter-type="branch" data-filter-value="Phạm Văn Mỹ">Phạm Văn Mỹ</button>
+        <button class="sub-tab" data-filter-type="branch" data-filter-value="Phạm Văn Thư">Phạm Văn Thư</button>
+        <button class="sub-tab" data-filter-type="branch" data-filter-value="Phạm Văn Tuyến">Phạm Văn Tuyến</button>
+        <button class="sub-tab" data-filter-type="branch" data-filter-value="Phạm Văn Chiến">Phạm Văn Chiến</button>
       </div>
     </div>
     
     <div class="card">
       <div class="toolbar">
         <input type="text" id="searchInput" placeholder="🔍 Tìm tên (không dấu cũng được)..." class="search-input">
-        <button class="btn btn--primary" id="addPersonBtn" onclick="openPersonForm()">+ Thêm cá nhân</button>
+        <button class="btn btn--primary" id="addPersonBtn">+ Thêm cá nhân</button>
       </div>
-      
-      <div class="person-grid" id="personGrid">
-        <p class="empty-state">Chưa có dữ liệu.</p>
-      </div>
+      <div class="person-grid" id="personGrid"><p class="empty-state">Chưa có dữ liệu.</p></div>
     </div>
   </section>
 
   <!-- TAB PHẢ ĐỒ -->
   <section class="tab-content" id="tab-pha-do" style="display:none">
     <div class="banner">
-      <img src="https://giapha-nam-viet.github.io/assets/bannerphaphe.png" 
-           alt="Banner Phả đồ" onerror="this.style.display='none'">
+      <img src="https://giapha-nam-viet.github.io/assets/bannerphaphe.png" alt="Banner Phả đồ" onerror="this.style.display='none'">
       <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="openPersonForm()">+</button>
     </div>
     <div class="card">
-      <p class="empty-state">
-        <strong>Phả đồ đang được xây dựng.</strong><br>
-        Sẽ hiển thị cây gia phả dạng đồ thị với các đường nối cha-con.
-      </p>
+      <p class="empty-state"><strong>Phả đồ đang được xây dựng.</strong><br>Sẽ hiển thị cây gia phả dạng đồ thị với các đường nối cha-con.</p>
     </div>
   </section>
 
   <!-- TAB NGOẠI PHẢ -->
   <section class="tab-content" id="tab-ngoai-pha" style="display:none">
     <div class="banner">
-      <img src="https://giapha-nam-viet.github.io/assets/bannerngoapha.png" 
-           alt="Banner Ngoại phả" onerror="this.style.display='none'">
+      <img src="https://giapha-nam-viet.github.io/assets/bannerngoapha.png" alt="Banner Ngoại phả" onerror="this.style.display='none'">
       <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="openPersonForm()">+</button>
     </div>
     <div class="card">
@@ -151,25 +137,257 @@
   </div>
 </div>
 
-<!-- Include form.html nội dung -->
-<div id="formContainer"></div>
+<!-- FORM MODAL -->
+<div class="form-modal" id="personFormModal" style="display:none">
+  <div class="form-modal__content">
+    <div class="form-modal__header">
+      <h2 class="form-modal__title" id="formTitle">THÊM CÁ NHÂN MỚI</h2>
+      <button class="form-modal__close" onclick="closePersonForm()">×</button>
+    </div>
+    <div class="form-modal__body">
+      <div class="form-section">
+        <label class="form-label">Ảnh đại diện (tỷ lệ 3:4)</label>
+        <div class="avatar-upload">
+          <div class="avatar-preview" id="avatarPreview"><span class="avatar-preview__placeholder">📷</span></div>
+          <div class="avatar-actions">
+            <input type="file" id="avatarInput" accept="image/*" style="display:none" onchange="handleAvatarUpload(event)">
+            <button class="btn btn--ghost btn--small" onclick="document.getElementById('avatarInput').click()">📷 Chọn tệp ảnh</button>
+            <p class="form-hint">Gợi ý: 900×1200 px. Tự động crop + nén WebP.</p>
+          </div>
+        </div>
+      </div>
+      <div class="form-section">
+        <h3 class="form-section__title">THÔNG TIN CƠ BẢN</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Vai trò trong gia phả <span class="required">*</span></label>
+            <select class="form-input" id="roleType" required>
+              <option value="Huyết thống">Huyết thống</option>
+              <option value="Dâu/Rể">Dâu/Rể (kết hôn vào dòng họ)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group form-group--full">
+            <label class="form-label">Họ và tên <span class="required">*</span></label>
+            <input type="text" class="form-input" id="fullName" placeholder="VD: Phạm Văn Mỹ" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Giới tính <span class="required">*</span></label>
+            <select class="form-input" id="gender" required>
+              <option value="">-- Chọn --</option>
+              <option value="Nam">Nam</option>
+              <option value="Nữ">Nữ</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Chi nhánh</label>
+            <input type="text" class="form-input" id="branch" placeholder="VD: Chi trưởng">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Thứ bậc trong anh chị em</label>
+            <input type="number" class="form-input" id="siblingOrder" placeholder="1, 2, 3..." min="1" max="20">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Đời thứ</label>
+            <select class="form-input" id="generation">
+              <option value="1">Đời 1</option>
+              <option value="2">Đời 2</option>
+              <option value="3">Đời 3</option>
+              <option value="4">Đời 4</option>
+              <option value="5">Đời 5</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Năm sinh</label>
+            <input type="number" class="form-input" id="birthYear" placeholder="VD: 1950" min="1800" max="2026">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Năm mất</label>
+            <input type="number" class="form-input" id="deathYear" placeholder="VD: 2020" min="1800" max="2026">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group form-group--full">
+            <label class="form-label">Nơi sinh</label>
+            <input type="text" class="form-input" id="birthPlace" placeholder="VD: Thôn Mai Hoàng, xã Đồng Bàn">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group form-group--full">
+            <label class="form-label">Hoàn cảnh đặc biệt</label>
+            <select class="form-input" id="specialStatus">
+              <option value="Bình thường">-- Bình thường --</option>
+              <option value="Không rõ">Không rõ (chưa có thông tin)</option>
+              <option value="Ly dị">Ly dị</option>
+              <option value="Mất sớm">Mất sớm</option>
+              <option value="Không chồng/vợ">Không chồng/vợ</option>
+              <option value="Không con">Không con</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="form-section">
+        <h3 class="form-section__title">QUAN HỆ GIA ĐÌNH</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">👨 Nhận bố</label>
+            <select class="form-input" id="fatherId"><option value="">-- Chọn bố --</option></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">👩 Nhận mẹ</label>
+            <select class="form-input" id="motherId"><option value="">-- Chọn mẹ --</option></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group form-group--full">
+            <label class="form-label">💑 Nhận vợ/chồng</label>
+            <select class="form-input" id="spouseId"><option value="">-- Chọn vợ/chồng --</option></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Thứ tự vợ/chồng</label>
+            <select class="form-input" id="spouseOrder">
+              <option value="">-- Chọn --</option>
+              <option value="1">Chính thất (vợ/chồng đầu)</option>
+              <option value="2">Kế thất (vợ/chồng thứ 2)</option>
+              <option value="3">Thứ thất (vợ/chồng thứ 3+)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="form-section">
+        <h3 class="form-section__title">CON CÁI</h3>
+        <div class="form-actions-inline">
+          <button type="button" class="btn btn--ghost btn--small" onclick="openAddChildModal()">+ Thêm con</button>
+          <button type="button" class="btn btn--ghost btn--small" onclick="openQuickAddModal()">⚡ Gán nhanh tên các con</button>
+        </div>
+        <div class="children-list" id="childrenList"><p class="empty-hint">Chưa có con nào. Bấm "+ Thêm con" để thêm.</p></div>
+      </div>
+      <div class="form-section">
+        <h3 class="form-section__title">THÔNG TIN CÁ NHÂN</h3>
+        <div class="form-row">
+          <div class="form-group form-group--full">
+            <label class="form-label">Nghề nghiệp / Chuyên môn</label>
+            <input type="text" class="form-input" id="occupation" placeholder="VD: Giáo viên, Nông dân...">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Thông tin liên hệ khác</label>
+          <div id="contactList" class="contact-list"></div>
+          <button type="button" class="btn btn--ghost btn--small" onclick="addContactRow()">+ Thêm mục liên hệ</button>
+        </div>
+      </div>
+      <div class="form-section">
+        <h3 class="form-section__title">TIỂU SỬ</h3>
+        <div class="form-group">
+          <label class="form-label">Ghi chú xung đột thông tin (nếu có)</label>
+          <textarea class="form-input form-input--textarea" id="conflictNote" placeholder="VD: Có tài liệu ghi tên khác..." rows="2"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tiểu sử / Ghi chú</label>
+          <textarea class="form-input form-input--textarea" id="bio" placeholder="Nhập tiểu sử, thông tin bổ sung..." rows="5"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="form-modal__footer">
+      <div class="form-modal__footer-left">
+        <button type="button" class="btn btn--ghost" onclick="closePersonForm()">❌ Hủy</button>
+      </div>
+      <div class="form-modal__footer-right">
+        <button type="button" class="btn btn--primary" onclick="savePerson()">💾 Lưu</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL THÊM CON -->
+<div class="form-modal form-modal--small" id="addChildModal" style="display:none">
+  <div class="form-modal__content">
+    <div class="form-modal__header">
+      <h2 class="form-modal__title">THÊM CON</h2>
+      <button class="form-modal__close" onclick="closeAddChildModal()">×</button>
+    </div>
+    <div class="form-modal__body">
+      <div class="form-group">
+        <label class="form-label">Loại con <span class="required">*</span></label>
+        <select class="form-input" id="childType">
+          <option value="Con chung">👶 Con chung (hiển thị ở cả bố + mẹ)</option>
+          <option value="Con riêng">👤 Con riêng (chỉ của bản thân)</option>
+          <option value="Con ngoài giá thú">⚠️ Con ngoài giá thú</option>
+          <option value="Con nuôi">🏠 Con nuôi</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Họ và tên <span class="required">*</span></label>
+        <input type="text" class="form-input" id="childName" placeholder="VD: Phạm Văn Hùng">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Giới tính <span class="required">*</span></label>
+          <select class="form-input" id="childGender"><option value="Nam">Nam</option><option value="Nữ">Nữ</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Năm sinh</label>
+          <input type="number" class="form-input" id="childBirthYear" placeholder="VD: 1980" min="1800" max="2026">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Thứ bậc trong anh chị em</label>
+        <input type="number" class="form-input" id="childOrder" placeholder="1, 2, 3..." min="1" max="20">
+      </div>
+    </div>
+    <div class="form-modal__footer">
+      <div class="form-modal__footer-left">
+        <button type="button" class="btn btn--ghost" onclick="closeAddChildModal()">Hủy</button>
+      </div>
+      <div class="form-modal__footer-right">
+        <button type="button" class="btn btn--primary" onclick="confirmAddChild()">Thêm vào danh sách</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL GÁN NHANH -->
+<div class="form-modal form-modal--small" id="quickAddModal" style="display:none">
+  <div class="form-modal__content">
+    <div class="form-modal__header">
+      <h2 class="form-modal__title">GÁN NHANH TÊN CÁC CON</h2>
+      <button class="form-modal__close" onclick="closeQuickAddModal()">×</button>
+    </div>
+    <div class="form-modal__body">
+      <div class="form-hint-box">
+        <p><strong>Hướng dẫn:</strong> Mỗi dòng 1 người, cách nhau bằng dấu "|"</p>
+        <p><strong>Format:</strong> Họ tên | Năm sinh | Giới tính | Loại con</p>
+        <p><strong>Loại con:</strong> Con chung / Con riêng / Con nuôi / Con ngoài giá thú</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Danh sách con</label>
+        <textarea class="form-input form-input--textarea form-input--mono" id="quickAddText" rows="8" placeholder="Phạm Văn A | 1980 | Nam | Con chung
+Phạm Thị B | 1983 | Nữ | Con chung
+Phạm Văn C | 1985 | Nam | Con nuôi"></textarea>
+      </div>
+    </div>
+    <div class="form-modal__footer">
+      <div class="form-modal__footer-left">
+        <button type="button" class="btn btn--ghost" onclick="closeQuickAddModal()">Hủy</button>
+      </div>
+      <div class="form-modal__footer-right">
+        <button type="button" class="btn btn--primary" onclick="confirmQuickAdd()">Thêm tất cả</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script src="app.js"></script>
 <script src="form.js"></script>
-
-<!-- Load form.html vào container -->
-<script>
-document.addEventListener('DOMContentLoaded', async () => {
-  try {
-    const response = await fetch('form.html');
-    const html = await response.text();
-    document.getElementById('formContainer').innerHTML = html;
-    console.log('✅ Đã load form.html');
-  } catch (err) {
-    console.error('❌ Lỗi load form.html:', err);
-  }
-});
-</script>
 
 </body>
 </html>

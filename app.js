@@ -1,6 +1,6 @@
 /* ============================================
-   GIA PHẢ NAM VIỆT - APP.JS (v1.6)
-   Đã tích hợp form thêm cá nhân
+   GIA PHẢ NAM VIỆT - APP.JS (v1.7)
+   Cặp vợ chồng cùng hàng, đúng thứ tự
    ============================================ */
 
 const SUPABASE_URL = 'https://bqojzghxgdkrfyhnvpku.supabase.co';
@@ -10,7 +10,7 @@ let sbClient = null;
 try {
   if (window.supabase && window.supabase.createClient) {
     sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    window.sbClient = sbClient;  // Cho form.js dùng chung
+    window.sbClient = sbClient;
     console.log('✅ Đã kết nối Supabase');
   }
 } catch (err) {
@@ -24,7 +24,6 @@ let filteredPersons = [];
 let currentUser = null;
 let currentFilter = { generation: null, branch: null };
 
-// Cho form.js dùng chung
 window.allPersons = allPersons;
 window.currentUser = currentUser;
 
@@ -40,9 +39,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadAllData();
 });
 
-/* ============================================
-   TABS CHÍNH
-   ============================================ */
 function setupTabs() {
   const tabs = document.querySelectorAll('.tab');
   const contents = document.querySelectorAll('.tab-content');
@@ -64,9 +60,6 @@ function setupTabs() {
   }
 }
 
-/* ============================================
-   SUB TABS
-   ============================================ */
 function setupSubTabs() {
   document.querySelectorAll('.sub-tab').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -86,9 +79,6 @@ function setupSubTabs() {
   });
 }
 
-/* ============================================
-   AUTH
-   ============================================ */
 function setupAuth() {
   const loginBtn = document.getElementById('loginBtn');
   const logoutBtn = document.getElementById('logoutBtn');
@@ -97,10 +87,7 @@ function setupAuth() {
   const sendMagicLink = document.getElementById('sendMagicLink');
   if (!loginBtn) return;
 
-  loginBtn.addEventListener('click', () => {
-    loginModal.style.display = 'flex';
-  });
-
+  loginBtn.addEventListener('click', () => { loginModal.style.display = 'flex'; });
   closeLogin.addEventListener('click', () => {
     loginModal.style.display = 'none';
     document.getElementById('loginMessage').textContent = '';
@@ -124,9 +111,7 @@ function setupAuth() {
     try {
       const { error } = await sbClient.auth.signInWithOtp({
         email: email,
-        options: {
-          emailRedirectTo: window.location.origin + window.location.pathname
-        }
+        options: { emailRedirectTo: window.location.origin + window.location.pathname }
       });
       if (error) throw error;
       msg.textContent = '✅ Đã gửi link đăng nhập! Kiểm tra email: ' + email;
@@ -181,36 +166,22 @@ function updateAuthUI(user) {
   }
 }
 
-/* ============================================
-   LOAD SETTINGS
-   ============================================ */
 async function loadSettings() {
   if (!sbClient) return;
   try {
     const { data, error } = await sbClient.from('settings').select('key, value');
     if (error) throw error;
     const settings = {};
-    (data || []).forEach(item => {
-      settings[item.key] = item.value;
-    });
+    (data || []).forEach(item => { settings[item.key] = item.value; });
 
     const loiTua = document.getElementById('loiTua');
-    if (loiTua && settings.loi_tua) {
-      loiTua.innerHTML = formatText(settings.loi_tua);
-    }
+    if (loiTua && settings.loi_tua) loiTua.innerHTML = formatText(settings.loi_tua);
 
     const huongDan = document.getElementById('huongDan');
-    if (huongDan && settings.huong_dan_su_dung) {
-      huongDan.innerHTML = formatText(settings.huong_dan_su_dung);
-    }
-  } catch (err) {
-    console.error('Lỗi load settings:', err);
-  }
+    if (huongDan && settings.huong_dan_su_dung) huongDan.innerHTML = formatText(settings.huong_dan_su_dung);
+  } catch (err) { console.error('Lỗi load settings:', err); }
 }
 
-/* ============================================
-   LOAD TẤT CẢ DỮ LIỆU
-   ============================================ */
 async function loadAllData() {
   const grid = document.getElementById('personGrid');
   if (!grid) return;
@@ -222,25 +193,19 @@ async function loadAllData() {
 
   try {
     const results = await Promise.all([
-      sbClient.from('persons').select('*').order('generation', { ascending: true }),
+      sbClient.from('persons').select('*').order('generation', { ascending: true }).order('sibling_order', { ascending: true, nullsFirst: false }),
       sbClient.from('marriages').select('*'),
       sbClient.from('parent_child').select('*')
     ]);
 
-    const personsRes = results[0];
-    const marriagesRes = results[1];
-    const pcRes = results[2];
+    if (results[0].error) throw results[0].error;
+    if (results[1].error) throw results[1].error;
+    if (results[2].error) throw results[2].error;
 
-    if (personsRes.error) throw personsRes.error;
-    if (marriagesRes.error) throw marriagesRes.error;
-    if (pcRes.error) throw pcRes.error;
-
-    allPersons = personsRes.data || [];
-    allMarriages = marriagesRes.data || [];
-    allParentChild = pcRes.data || [];
+    allPersons = results[0].data || [];
+    allMarriages = results[1].data || [];
+    allParentChild = results[2].data || [];
     filteredPersons = allPersons.slice();
-
-    // Cho form.js dùng chung
     window.allPersons = allPersons;
 
     renderPersons();
@@ -251,9 +216,6 @@ async function loadAllData() {
   }
 }
 
-/* ============================================
-   LẤY VỢ/CHỒNG CỦA 1 NGƯỜI
-   ============================================ */
 function getSpouses(personId) {
   const spouseIds = [];
   allMarriages.forEach(m => {
@@ -263,9 +225,6 @@ function getSpouses(personId) {
   return spouseIds.map(id => allPersons.find(p => p.id === id)).filter(Boolean);
 }
 
-/* ============================================
-   RENDER PERSONS
-   ============================================ */
 function renderPersons() {
   const grid = document.getElementById('personGrid');
   if (!grid) return;
@@ -287,6 +246,11 @@ function renderPersons() {
   sortedGens.forEach(gen => {
     const people = byGeneration[gen];
     const huyetThong = people.filter(p => p.role === 'Huyết thống' || !p.role);
+    huyetThong.sort((a, b) => {
+      const aOrder = a.sibling_order || 999;
+      const bOrder = b.sibling_order || 999;
+      return aOrder - bOrder;
+    });
 
     const genSection = document.createElement('div');
     genSection.className = 'generation-section';
@@ -298,38 +262,30 @@ function renderPersons() {
     genTitle.textContent = titleText;
     genSection.appendChild(genTitle);
 
-    const columns = document.createElement('div');
-    columns.className = 'people-columns';
-
-    /* Cột trái: Huyết thống */
-    const colLeft = document.createElement('div');
-    colLeft.innerHTML = '<div class="people-column__header">Huyết thống</div>';
-
-    if (huyetThong.length === 0) {
-      colLeft.innerHTML += '<p class="empty-state" style="padding:20px;font-size:14px;">Chưa có dữ liệu</p>';
-    } else {
-      huyetThong.forEach(p => {
-        const coupleRow = document.createElement('div');
-        coupleRow.className = 'couple-row';
-        coupleRow.appendChild(createPersonMini(p));
-        colLeft.appendChild(coupleRow);
-      });
-    }
-
-    /* Cột phải: Phối ngẫu tương ứng */
-    const colRight = document.createElement('div');
-    colRight.innerHTML = '<div class="people-column__header">Phối ngẫu</div>';
+    const header = document.createElement('div');
+    header.className = 'people-header';
+    header.innerHTML = 
+      '<div class="people-header__col">Huyết thống</div>' +
+      '<div class="people-header__col">Phối ngẫu</div>';
+    genSection.appendChild(header);
 
     if (huyetThong.length === 0) {
-      colRight.innerHTML += '<p class="empty-state" style="padding:20px;font-size:14px;">Chưa có dữ liệu</p>';
+      const emptyRow = document.createElement('div');
+      emptyRow.className = 'couple-row';
+      emptyRow.innerHTML = 
+        '<div><p class="empty-state" style="padding:20px;font-size:14px;">Chưa có dữ liệu</p></div>' +
+        '<div></div>';
+      genSection.appendChild(emptyRow);
     } else {
       huyetThong.forEach(p => {
         const spouses = getSpouses(p.id);
         const coupleRow = document.createElement('div');
         coupleRow.className = 'couple-row';
-        const spouseContainer = document.createElement('div');
-        spouseContainer.className = 'spouse-list';
 
+        const leftCol = document.createElement('div');
+        leftCol.appendChild(createPersonMini(p));
+
+        const rightCol = document.createElement('div');
         if (spouses.length === 0) {
           const emptyBox = document.createElement('div');
           emptyBox.className = 'person-mini';
@@ -339,26 +295,21 @@ function renderPersons() {
           emptyBox.style.color = '#99AACC';
           emptyBox.style.fontSize = '13px';
           emptyBox.textContent = '(chưa có thông tin)';
-          spouseContainer.appendChild(emptyBox);
+          rightCol.appendChild(emptyBox);
         } else {
-          spouses.forEach(s => spouseContainer.appendChild(createPersonMini(s)));
+          spouses.forEach(s => rightCol.appendChild(createPersonMini(s)));
         }
 
-        coupleRow.appendChild(spouseContainer);
-        colRight.appendChild(coupleRow);
+        coupleRow.appendChild(leftCol);
+        coupleRow.appendChild(rightCol);
+        genSection.appendChild(coupleRow);
       });
     }
 
-    columns.appendChild(colLeft);
-    columns.appendChild(colRight);
-    genSection.appendChild(columns);
     grid.appendChild(genSection);
   });
 }
 
-/* ============================================
-   TẠO THẺ NGƯỜI RÚT GỌN
-   ============================================ */
 function createPersonMini(person) {
   const card = document.createElement('div');
   card.className = 'person-mini';
@@ -386,9 +337,6 @@ function createPersonMini(person) {
   return card;
 }
 
-/* ============================================
-   SEARCH & FILTER
-   ============================================ */
 function setupSearch() {
   const searchInput = document.getElementById('searchInput');
   if (searchInput) searchInput.addEventListener('input', applyFilters);
@@ -412,16 +360,9 @@ function applyFilters() {
 }
 
 function removeVietnameseTones(str) {
-  return str
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D');
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
 }
 
-/* ============================================
-   NÚT THÊM CÁ NHÂN - GỌI FORM MỚI
-   ============================================ */
 function setupAddPerson() {
   const btn = document.getElementById('addPersonBtn');
   if (!btn) return;
@@ -431,7 +372,6 @@ function setupAddPerson() {
       document.getElementById('loginModal').style.display = 'flex';
       return;
     }
-    // Gọi form thêm cá nhân
     if (typeof openPersonForm === 'function') {
       openPersonForm();
     } else {
@@ -440,9 +380,6 @@ function setupAddPerson() {
   });
 }
 
-/* ============================================
-   UTILITIES
-   ============================================ */
 function formatText(text) {
   if (!text) return '';
   let content = text;
@@ -451,11 +388,7 @@ function formatText(text) {
       content = JSON.parse(text);
     }
   } catch (e) {}
-  return String(content)
-    .split('\n')
-    .map(line => '<p>' + line + '</p>')
-    .join('');
+  return String(content).split('\n').map(line => '<p>' + line + '</p>').join('');
 }
 
 console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT', 'font-size: 20px; color: #01285E; font-weight: bold;');
-console.log('%cDự án GiaPhaNamViet © 2026', 'color: #627794;');
