@@ -35,7 +35,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadAllData();
 });
 
-/* TABS CHÍNH */
 function setupTabs() {
   const tabs = document.querySelectorAll('.tab');
   const contents = document.querySelectorAll('.tab-content');
@@ -52,18 +51,17 @@ function setupTabs() {
   });
   const hash = window.location.hash.replace('#', '');
   if (hash) {
-    const tab = document.querySelector(`.tab[data-tab="${hash}"]`);
+    const tab = document.querySelector('.tab[data-tab="' + hash + '"]');
     if (tab) tab.click();
   }
 }
 
-/* SUB TABS (Đời / Chi) */
 function setupSubTabs() {
   document.querySelectorAll('.sub-tab').forEach(btn => {
     btn.addEventListener('click', () => {
       const type = btn.dataset.filterType;
       const value = btn.dataset.filterValue;
-      document.querySelectorAll(`.sub-tab[data-filter-type="${type}"]`).forEach(b =>
+      document.querySelectorAll('.sub-tab[data-filter-type="' + type + '"]').forEach(b =>
         b.classList.remove('sub-tab--active')
       );
       btn.classList.add('sub-tab--active');
@@ -77,7 +75,6 @@ function setupSubTabs() {
   });
 }
 
-/* AUTH */
 function setupAuth() {
   const loginBtn = document.getElementById('loginBtn');
   const logoutBtn = document.getElementById('logoutBtn');
@@ -169,7 +166,6 @@ function updateAuthUI(user) {
   }
 }
 
-/* LOAD SETTINGS */
 async function loadSettings() {
   if (!sbClient) return;
   try {
@@ -194,7 +190,6 @@ async function loadSettings() {
   }
 }
 
-/* LOAD TẤT CẢ DỮ LIỆU */
 async function loadAllData() {
   const grid = document.getElementById('personGrid');
   if (!grid) return;
@@ -205,11 +200,15 @@ async function loadAllData() {
   grid.innerHTML = '<p class="empty-state">Đang tải dữ liệu...</p>';
 
   try {
-    const [personsRes, marriagesRes, pcRes] = await Promise.all([
+    const results = await Promise.all([
       sbClient.from('persons').select('*').order('generation', { ascending: true }),
       sbClient.from('marriages').select('*'),
       sbClient.from('parent_child').select('*')
     ]);
+
+    const personsRes = results[0];
+    const marriagesRes = results[1];
+    const pcRes = results[2];
 
     if (personsRes.error) throw personsRes.error;
     if (marriagesRes.error) throw marriagesRes.error;
@@ -218,16 +217,15 @@ async function loadAllData() {
     allPersons = personsRes.data || [];
     allMarriages = marriagesRes.data || [];
     allParentChild = pcRes.data || [];
-    filteredPersons = [...allPersons];
+    filteredPersons = allPersons.slice();
     renderPersons();
-    console.log(`✅ Đã load ${allPersons.length} người, ${allMarriages.length} hôn nhân`);
+    console.log('✅ Đã load ' + allPersons.length + ' người, ' + allMarriages.length + ' hôn nhân');
   } catch (err) {
     console.error('Lỗi load data:', err);
     grid.innerHTML = '<p class="empty-state">❌ Không tải được dữ liệu.</p>';
   }
 }
 
-/* LẤY VỢ/CHỒNG CỦA 1 NGƯỜI */
 function getSpouses(personId) {
   const spouseIds = [];
   allMarriages.forEach(m => {
@@ -237,7 +235,6 @@ function getSpouses(personId) {
   return spouseIds.map(id => allPersons.find(p => p.id === id)).filter(Boolean);
 }
 
-/* RENDER PERSONS */
 function renderPersons() {
   const grid = document.getElementById('personGrid');
   if (!grid) return;
@@ -265,15 +262,14 @@ function renderPersons() {
 
     const genTitle = document.createElement('div');
     genTitle.className = 'generation-section__title';
-    let titleText = `Đời thứ ${gen}`;
-    if (gen === '1' || gen === 1) titleText = `Đời thứ 1 — Thủy tổ`;
+    let titleText = 'Đời thứ ' + gen;
+    if (gen === '1' || gen === 1) titleText = 'Đời thứ 1 — Thủy tổ';
     genTitle.textContent = titleText;
     genSection.appendChild(genTitle);
 
     const columns = document.createElement('div');
     columns.className = 'people-columns';
 
-    /* Cột trái: Huyết thống */
     const colLeft = document.createElement('div');
     colLeft.innerHTML = '<div class="people-column__header">Huyết thống</div>';
 
@@ -288,7 +284,6 @@ function renderPersons() {
       });
     }
 
-    /* Cột phải: Phối ngẫu tương ứng */
     const colRight = document.createElement('div');
     colRight.innerHTML = '<div class="people-column__header">Phối ngẫu</div>';
 
@@ -328,7 +323,6 @@ function renderPersons() {
   });
 }
 
-/* TẠO THẺ NGƯỜI RÚT GỌN */
 function createPersonMini(person) {
   const card = document.createElement('div');
   card.className = 'person-mini';
@@ -341,21 +335,19 @@ function createPersonMini(person) {
   if (person.birth_year) dateParts.push(person.birth_year);
   if (person.death_year) dateParts.push(person.death_year);
   const dateStr = dateParts.length === 2 
-    ? `${dateParts[0]} - ${dateParts[1]}` 
-    : (dateParts[0] ? `${dateParts[0]}` : '');
+    ? dateParts[0] + ' - ' + dateParts[1]
+    : (dateParts[0] ? String(dateParts[0]) : '');
 
-  const genStr = person.generation ? `Đời ${person.generation}` : '';
+  const genStr = person.generation ? 'Đời ' + person.generation : '';
 
-  card.innerHTML = `
-    <div class="${nameClass}">${person.full_name || '(chưa có tên)'}</div>
-    ${dateStr ? `<div class="person-mini__dates">${dateStr}</div>` : ''}
-    ${genStr ? `<div class="person-mini__generation">${genStr}</div>` : ''}
-  `;
+  card.innerHTML = 
+    '<div class="' + nameClass + '">' + (person.full_name || '(chưa có tên)') + '</div>' +
+    (dateStr ? '<div class="person-mini__dates">' + dateStr + '</div>' : '') +
+    (genStr ? '<div class="person-mini__generation">' + genStr + '</div>' : '');
 
   return card;
 }
 
-/* SEARCH & FILTER */
 function setupSearch() {
   const searchInput = document.getElementById('searchInput');
   if (searchInput) searchInput.addEventListener('input', applyFilters);
@@ -386,7 +378,6 @@ function removeVietnameseTones(str) {
     .replace(/Đ/g, 'D');
 }
 
-/* ADD PERSON */
 function setupAddPerson() {
   const btn = document.getElementById('addPersonBtn');
   if (!btn) return;
@@ -410,7 +401,7 @@ function formatText(text) {
   } catch (e) {}
   return String(content)
     .split('\n')
-    .map(line => `<p>${line}</p>`)
+    .map(line => '<p>' + line + '</p>')
     .join('');
 }
 
