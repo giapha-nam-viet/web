@@ -1,6 +1,6 @@
 /* ============================================
-   GIA PHẢ NAM VIỆT - APP.JS (v1.5)
-   Bản hoàn chỉnh - Đã fix lỗi bị cắt
+   GIA PHẢ NAM VIỆT - APP.JS (v1.6)
+   Đã tích hợp form thêm cá nhân
    ============================================ */
 
 const SUPABASE_URL = 'https://bqojzghxgdkrfyhnvpku.supabase.co';
@@ -10,6 +10,7 @@ let sbClient = null;
 try {
   if (window.supabase && window.supabase.createClient) {
     sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    window.sbClient = sbClient;  // Cho form.js dùng chung
     console.log('✅ Đã kết nối Supabase');
   }
 } catch (err) {
@@ -23,6 +24,10 @@ let filteredPersons = [];
 let currentUser = null;
 let currentFilter = { generation: null, branch: null };
 
+// Cho form.js dùng chung
+window.allPersons = allPersons;
+window.currentUser = currentUser;
+
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('🚀 Gia Phả Nam Việt đang khởi động...');
   setupTabs();
@@ -35,6 +40,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadAllData();
 });
 
+/* ============================================
+   TABS CHÍNH
+   ============================================ */
 function setupTabs() {
   const tabs = document.querySelectorAll('.tab');
   const contents = document.querySelectorAll('.tab-content');
@@ -56,6 +64,9 @@ function setupTabs() {
   }
 }
 
+/* ============================================
+   SUB TABS
+   ============================================ */
 function setupSubTabs() {
   document.querySelectorAll('.sub-tab').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -75,6 +86,9 @@ function setupSubTabs() {
   });
 }
 
+/* ============================================
+   AUTH
+   ============================================ */
 function setupAuth() {
   const loginBtn = document.getElementById('loginBtn');
   const logoutBtn = document.getElementById('logoutBtn');
@@ -150,6 +164,7 @@ async function checkAuthSession() {
 
 function updateAuthUI(user) {
   currentUser = user;
+  window.currentUser = user;
   const status = document.getElementById('authStatus');
   const loginBtn = document.getElementById('loginBtn');
   const logoutBtn = document.getElementById('logoutBtn');
@@ -166,6 +181,9 @@ function updateAuthUI(user) {
   }
 }
 
+/* ============================================
+   LOAD SETTINGS
+   ============================================ */
 async function loadSettings() {
   if (!sbClient) return;
   try {
@@ -190,6 +208,9 @@ async function loadSettings() {
   }
 }
 
+/* ============================================
+   LOAD TẤT CẢ DỮ LIỆU
+   ============================================ */
 async function loadAllData() {
   const grid = document.getElementById('personGrid');
   if (!grid) return;
@@ -218,6 +239,10 @@ async function loadAllData() {
     allMarriages = marriagesRes.data || [];
     allParentChild = pcRes.data || [];
     filteredPersons = allPersons.slice();
+
+    // Cho form.js dùng chung
+    window.allPersons = allPersons;
+
     renderPersons();
     console.log('✅ Đã load ' + allPersons.length + ' người, ' + allMarriages.length + ' hôn nhân');
   } catch (err) {
@@ -226,6 +251,9 @@ async function loadAllData() {
   }
 }
 
+/* ============================================
+   LẤY VỢ/CHỒNG CỦA 1 NGƯỜI
+   ============================================ */
 function getSpouses(personId) {
   const spouseIds = [];
   allMarriages.forEach(m => {
@@ -235,6 +263,9 @@ function getSpouses(personId) {
   return spouseIds.map(id => allPersons.find(p => p.id === id)).filter(Boolean);
 }
 
+/* ============================================
+   RENDER PERSONS
+   ============================================ */
 function renderPersons() {
   const grid = document.getElementById('personGrid');
   if (!grid) return;
@@ -270,6 +301,7 @@ function renderPersons() {
     const columns = document.createElement('div');
     columns.className = 'people-columns';
 
+    /* Cột trái: Huyết thống */
     const colLeft = document.createElement('div');
     colLeft.innerHTML = '<div class="people-column__header">Huyết thống</div>';
 
@@ -284,6 +316,7 @@ function renderPersons() {
       });
     }
 
+    /* Cột phải: Phối ngẫu tương ứng */
     const colRight = document.createElement('div');
     colRight.innerHTML = '<div class="people-column__header">Phối ngẫu</div>';
 
@@ -323,10 +356,15 @@ function renderPersons() {
   });
 }
 
+/* ============================================
+   TẠO THẺ NGƯỜI RÚT GỌN
+   ============================================ */
 function createPersonMini(person) {
   const card = document.createElement('div');
   card.className = 'person-mini';
   card.dataset.id = person.id;
+  card.style.cursor = 'pointer';
+  card.onclick = () => openPersonForm(person.id);
 
   let nameClass = 'person-mini__name';
   if (person.is_unknown) nameClass += ' person-mini__name--unknown';
@@ -348,6 +386,9 @@ function createPersonMini(person) {
   return card;
 }
 
+/* ============================================
+   SEARCH & FILTER
+   ============================================ */
 function setupSearch() {
   const searchInput = document.getElementById('searchInput');
   if (searchInput) searchInput.addEventListener('input', applyFilters);
@@ -378,6 +419,9 @@ function removeVietnameseTones(str) {
     .replace(/Đ/g, 'D');
 }
 
+/* ============================================
+   NÚT THÊM CÁ NHÂN - GỌI FORM MỚI
+   ============================================ */
 function setupAddPerson() {
   const btn = document.getElementById('addPersonBtn');
   if (!btn) return;
@@ -387,10 +431,18 @@ function setupAddPerson() {
       document.getElementById('loginModal').style.display = 'flex';
       return;
     }
-    alert('📝 Form thêm cá nhân sẽ có trong phiên bản tiếp theo!');
+    // Gọi form thêm cá nhân
+    if (typeof openPersonForm === 'function') {
+      openPersonForm();
+    } else {
+      alert('⚠️ Form chưa được tải. Vui lòng thử lại sau.');
+    }
   });
 }
 
+/* ============================================
+   UTILITIES
+   ============================================ */
 function formatText(text) {
   if (!text) return '';
   let content = text;
