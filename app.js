@@ -1,6 +1,6 @@
 /* ============================================
-   GIA PHẢ NAM VIỆT - APP.JS (v1.4)
-   Bỏ số thứ bậc + Đầy đủ logic
+   GIA PHẢ NAM VIỆT - APP.JS (v1.5)
+   Bản hoàn chỉnh - Đã fix lỗi bị cắt
    ============================================ */
 
 const SUPABASE_URL = 'https://bqojzghxgdkrfyhnvpku.supabase.co';
@@ -12,7 +12,9 @@ try {
     sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     console.log('✅ Đã kết nối Supabase');
   }
-} catch (err) { console.error('❌ Lỗi khởi tạo Supabase:', err); }
+} catch (err) {
+  console.error('❌ Lỗi khởi tạo Supabase:', err);
+}
 
 let allPersons = [];
 let allMarriages = [];
@@ -55,7 +57,7 @@ function setupTabs() {
   }
 }
 
-/* SUB TABS */
+/* SUB TABS (Đời / Chi) */
 function setupSubTabs() {
   document.querySelectorAll('.sub-tab').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -84,7 +86,10 @@ function setupAuth() {
   const sendMagicLink = document.getElementById('sendMagicLink');
   if (!loginBtn) return;
 
-  loginBtn.addEventListener('click', () => { loginModal.style.display = 'flex'; });
+  loginBtn.addEventListener('click', () => {
+    loginModal.style.display = 'flex';
+  });
+
   closeLogin.addEventListener('click', () => {
     loginModal.style.display = 'none';
     document.getElementById('loginMessage').textContent = '';
@@ -93,14 +98,24 @@ function setupAuth() {
   sendMagicLink.addEventListener('click', async () => {
     const email = document.getElementById('loginEmail').value.trim();
     const msg = document.getElementById('loginMessage');
-    if (!email) { msg.textContent = '⚠️ Vui lòng nhập email'; msg.className = 'modal__note modal__note--error'; return; }
-    if (!sbClient) { msg.textContent = '⚠️ Chưa kết nối được Supabase'; msg.className = 'modal__note modal__note--error'; return; }
+    if (!email) {
+      msg.textContent = '⚠️ Vui lòng nhập email';
+      msg.className = 'modal__note modal__note--error';
+      return;
+    }
+    if (!sbClient) {
+      msg.textContent = '⚠️ Chưa kết nối được Supabase';
+      msg.className = 'modal__note modal__note--error';
+      return;
+    }
     sendMagicLink.disabled = true;
     sendMagicLink.textContent = 'Đang gửi...';
     try {
       const { error } = await sbClient.auth.signInWithOtp({
         email: email,
-        options: { emailRedirectTo: window.location.origin + window.location.pathname }
+        options: {
+          emailRedirectTo: window.location.origin + window.location.pathname
+        }
       });
       if (error) throw error;
       msg.textContent = '✅ Đã gửi link đăng nhập! Kiểm tra email: ' + email;
@@ -131,7 +146,9 @@ async function checkAuthSession() {
     sbClient.auth.onAuthStateChange((_event, session) => {
       updateAuthUI(session?.user || null);
     });
-  } catch (err) { console.error(err); }
+  } catch (err) {
+    console.error('Lỗi kiểm tra session:', err);
+  }
 }
 
 function updateAuthUI(user) {
@@ -159,14 +176,22 @@ async function loadSettings() {
     const { data, error } = await sbClient.from('settings').select('key, value');
     if (error) throw error;
     const settings = {};
-    (data || []).forEach(item => { settings[item.key] = item.value; });
+    (data || []).forEach(item => {
+      settings[item.key] = item.value;
+    });
 
     const loiTua = document.getElementById('loiTua');
-    if (loiTua && settings.loi_tua) loiTua.innerHTML = formatText(settings.loi_tua);
+    if (loiTua && settings.loi_tua) {
+      loiTua.innerHTML = formatText(settings.loi_tua);
+    }
 
     const huongDan = document.getElementById('huongDan');
-    if (huongDan && settings.huong_dan_su_dung) huongDan.innerHTML = formatText(settings.huong_dan_su_dung);
-  } catch (err) { console.error(err); }
+    if (huongDan && settings.huong_dan_su_dung) {
+      huongDan.innerHTML = formatText(settings.huong_dan_su_dung);
+    }
+  } catch (err) {
+    console.error('Lỗi load settings:', err);
+  }
 }
 
 /* LOAD TẤT CẢ DỮ LIỆU */
@@ -181,10 +206,11 @@ async function loadAllData() {
 
   try {
     const [personsRes, marriagesRes, pcRes] = await Promise.all([
-      sbClient.from('persons').select('*').order('generation', { ascending: true }).order('birth_order', { ascending: true, nullsFirst: false }),
+      sbClient.from('persons').select('*').order('generation', { ascending: true }),
       sbClient.from('marriages').select('*'),
       sbClient.from('parent_child').select('*')
     ]);
+
     if (personsRes.error) throw personsRes.error;
     if (marriagesRes.error) throw marriagesRes.error;
     if (pcRes.error) throw pcRes.error;
@@ -196,7 +222,7 @@ async function loadAllData() {
     renderPersons();
     console.log(`✅ Đã load ${allPersons.length} người, ${allMarriages.length} hôn nhân`);
   } catch (err) {
-    console.error(err);
+    console.error('Lỗi load data:', err);
     grid.innerHTML = '<p class="empty-state">❌ Không tải được dữ liệu.</p>';
   }
 }
@@ -220,7 +246,6 @@ function renderPersons() {
     return;
   }
 
-  // Nhóm theo đời
   const byGeneration = {};
   filteredPersons.forEach(p => {
     const gen = p.generation || 0;
@@ -234,4 +259,160 @@ function renderPersons() {
   sortedGens.forEach(gen => {
     const people = byGeneration[gen];
     const huyetThong = people.filter(p => p.role === 'Huyết thống' || !p.role);
-    const phoiNguu = people.filter(p => p.role === 'Phối ngẫu');
+
+    const genSection = document.createElement('div');
+    genSection.className = 'generation-section';
+
+    const genTitle = document.createElement('div');
+    genTitle.className = 'generation-section__title';
+    let titleText = `Đời thứ ${gen}`;
+    if (gen === '1' || gen === 1) titleText = `Đời thứ 1 — Thủy tổ`;
+    genTitle.textContent = titleText;
+    genSection.appendChild(genTitle);
+
+    const columns = document.createElement('div');
+    columns.className = 'people-columns';
+
+    /* Cột trái: Huyết thống */
+    const colLeft = document.createElement('div');
+    colLeft.innerHTML = '<div class="people-column__header">Huyết thống</div>';
+
+    if (huyetThong.length === 0) {
+      colLeft.innerHTML += '<p class="empty-state" style="padding:20px;font-size:14px;">Chưa có dữ liệu</p>';
+    } else {
+      huyetThong.forEach(p => {
+        const coupleRow = document.createElement('div');
+        coupleRow.className = 'couple-row';
+        coupleRow.appendChild(createPersonMini(p));
+        colLeft.appendChild(coupleRow);
+      });
+    }
+
+    /* Cột phải: Phối ngẫu tương ứng */
+    const colRight = document.createElement('div');
+    colRight.innerHTML = '<div class="people-column__header">Phối ngẫu</div>';
+
+    if (huyetThong.length === 0) {
+      colRight.innerHTML += '<p class="empty-state" style="padding:20px;font-size:14px;">Chưa có dữ liệu</p>';
+    } else {
+      huyetThong.forEach(p => {
+        const spouses = getSpouses(p.id);
+        const coupleRow = document.createElement('div');
+        coupleRow.className = 'couple-row';
+        const spouseContainer = document.createElement('div');
+        spouseContainer.className = 'spouse-list';
+
+        if (spouses.length === 0) {
+          const emptyBox = document.createElement('div');
+          emptyBox.className = 'person-mini';
+          emptyBox.style.opacity = '0.4';
+          emptyBox.style.textAlign = 'center';
+          emptyBox.style.fontStyle = 'italic';
+          emptyBox.style.color = '#99AACC';
+          emptyBox.style.fontSize = '13px';
+          emptyBox.textContent = '(chưa có thông tin)';
+          spouseContainer.appendChild(emptyBox);
+        } else {
+          spouses.forEach(s => spouseContainer.appendChild(createPersonMini(s)));
+        }
+
+        coupleRow.appendChild(spouseContainer);
+        colRight.appendChild(coupleRow);
+      });
+    }
+
+    columns.appendChild(colLeft);
+    columns.appendChild(colRight);
+    genSection.appendChild(columns);
+    grid.appendChild(genSection);
+  });
+}
+
+/* TẠO THẺ NGƯỜI RÚT GỌN */
+function createPersonMini(person) {
+  const card = document.createElement('div');
+  card.className = 'person-mini';
+  card.dataset.id = person.id;
+
+  let nameClass = 'person-mini__name';
+  if (person.is_unknown) nameClass += ' person-mini__name--unknown';
+
+  const dateParts = [];
+  if (person.birth_year) dateParts.push(person.birth_year);
+  if (person.death_year) dateParts.push(person.death_year);
+  const dateStr = dateParts.length === 2 
+    ? `${dateParts[0]} - ${dateParts[1]}` 
+    : (dateParts[0] ? `${dateParts[0]}` : '');
+
+  const genStr = person.generation ? `Đời ${person.generation}` : '';
+
+  card.innerHTML = `
+    <div class="${nameClass}">${person.full_name || '(chưa có tên)'}</div>
+    ${dateStr ? `<div class="person-mini__dates">${dateStr}</div>` : ''}
+    ${genStr ? `<div class="person-mini__generation">${genStr}</div>` : ''}
+  `;
+
+  return card;
+}
+
+/* SEARCH & FILTER */
+function setupSearch() {
+  const searchInput = document.getElementById('searchInput');
+  if (searchInput) searchInput.addEventListener('input', applyFilters);
+}
+
+function applyFilters() {
+  const keyword = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
+
+  filteredPersons = allPersons.filter(p => {
+    if (currentFilter.generation && p.generation !== currentFilter.generation) return false;
+    if (currentFilter.branch && p.branch !== currentFilter.branch) return false;
+    if (keyword) {
+      const name = (p.full_name || '').toLowerCase();
+      const nameNoDau = removeVietnameseTones(name);
+      const keywordNoDau = removeVietnameseTones(keyword);
+      if (!name.includes(keyword) && !nameNoDau.includes(keywordNoDau)) return false;
+    }
+    return true;
+  });
+  renderPersons();
+}
+
+function removeVietnameseTones(str) {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D');
+}
+
+/* ADD PERSON */
+function setupAddPerson() {
+  const btn = document.getElementById('addPersonBtn');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    if (!currentUser) {
+      alert('⚠️ Bạn cần đăng nhập trước khi thêm người.');
+      document.getElementById('loginModal').style.display = 'flex';
+      return;
+    }
+    alert('📝 Form thêm cá nhân sẽ có trong phiên bản tiếp theo!');
+  });
+}
+
+function formatText(text) {
+  if (!text) return '';
+  let content = text;
+  try {
+    if (typeof text === 'string' && (text.startsWith('"') || text.startsWith('['))) {
+      content = JSON.parse(text);
+    }
+  } catch (e) {}
+  return String(content)
+    .split('\n')
+    .map(line => `<p>${line}</p>`)
+    .join('');
+}
+
+console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT', 'font-size: 20px; color: #01285E; font-weight: bold;');
+console.log('%cDự án GiaPhaNamViet © 2026', 'color: #627794;');
