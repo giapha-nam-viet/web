@@ -6,20 +6,15 @@
   <title>Gia Phả Họ Phạm - Nam Việt</title>
   <meta name="description" content="Gia phả động họ Phạm - Long Xuyên, Nhân Mỹ, Hà Nam">
   
-  <!-- Font Google -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Noto+Serif:wght@400;700&display=swap" rel="stylesheet">
   
-  <!-- CSS -->
   <link rel="stylesheet" href="style.css">
-  
-  <!-- Supabase SDK v2 -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
-<!-- ===== HEADER ===== -->
 <header class="header">
   <div class="header__top">
     <div class="logo">
@@ -33,7 +28,6 @@
   </div>
 </header>
 
-<!-- ===== TABS ===== -->
 <nav class="tabs">
   <button class="tab tab--active" data-tab="trang-chu">Trang chủ</button>
   <button class="tab" data-tab="danh-tinh">Danh tính</button>
@@ -41,15 +35,14 @@
   <button class="tab" data-tab="ngoai-pha">Ngoại phả</button>
 </nav>
 
-<!-- ===== MAIN ===== -->
 <main class="main">
 
   <!-- TAB TRANG CHỦ -->
   <section class="tab-content" id="tab-trang-chu">
     <div class="banner">
       <img src="https://giapha-nam-viet.github.io/assets/bannertrang%20chu.png" 
-           alt="Banner Trang chủ" 
-           onerror="this.style.display='none'">
+           alt="Banner Trang chủ" onerror="this.style.display='none'">
+      <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="document.querySelector('.tab[data-tab=\'danh-tinh\']').click(); document.getElementById('addPersonBtn').click();">+</button>
     </div>
     
     <div class="card">
@@ -71,26 +64,38 @@
   <section class="tab-content" id="tab-danh-tinh" style="display:none">
     <div class="banner">
       <img src="https://giapha-nam-viet.github.io/assets/bannerdanhtinh.png" 
-           alt="Banner Danh tính" 
-           onerror="this.style.display='none'">
+           alt="Banner Danh tính" onerror="this.style.display='none'">
+      <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="document.getElementById('addPersonBtn').click();">+</button>
+    </div>
+    
+    <!-- SUB TABS: Lọc theo Đời / Chi -->
+    <div class="sub-tabs">
+      <div class="sub-tabs__group">
+        <span class="sub-tabs__label">Đời:</span>
+        <button class="sub-tab sub-tab--active" data-filter-type="generation" data-filter-value="">Tất cả</button>
+        <button class="sub-tab" data-filter-type="generation" data-filter-value="1">Đời 1</button>
+        <button class="sub-tab" data-filter-type="generation" data-filter-value="2">Đời 2</button>
+        <button class="sub-tab" data-filter-type="generation" data-filter-value="3">Đời 3</button>
+        <button class="sub-tab" data-filter-type="generation" data-filter-value="4">Đời 4</button>
+        <button class="sub-tab" data-filter-type="generation" data-filter-value="5">Đời 5</button>
+      </div>
+      <div class="sub-tabs__group">
+        <span class="sub-tabs__label">Chi:</span>
+        <button class="sub-tab sub-tab--active" data-filter-type="branch" data-filter-value="">Tất cả</button>
+        <button class="sub-tab" data-filter-type="branch" data-filter-value="Chi Phạm Văn Mỹ">Phạm Văn Mỹ</button>
+        <button class="sub-tab" data-filter-type="branch" data-filter-value="Chi Phạm Thị Lâm">Phạm Thị Lâm</button>
+        <button class="sub-tab" data-filter-type="branch" data-filter-value="Chi Phạm Văn Thư">Phạm Văn Thư</button>
+      </div>
     </div>
     
     <div class="card">
       <div class="toolbar">
         <input type="text" id="searchInput" placeholder="🔍 Tìm tên (không dấu cũng được)..." class="search-input">
-        <select id="filterGeneration" class="select">
-          <option value="">-- Tất cả các đời --</option>
-          <option value="1">Đời 1</option>
-          <option value="2">Đời 2</option>
-          <option value="3">Đời 3</option>
-          <option value="4">Đời 4</option>
-          <option value="5">Đời 5</option>
-        </select>
         <button class="btn btn--primary" id="addPersonBtn">+ Thêm cá nhân</button>
       </div>
       
       <div class="person-grid" id="personGrid">
-        <p class="empty-state">Chưa có dữ liệu. Bấm "+ Thêm cá nhân" để bắt đầu.</p>
+        <p class="empty-state">Chưa có dữ liệu.</p>
       </div>
     </div>
   </section>
@@ -99,15 +104,13 @@
   <section class="tab-content" id="tab-pha-do" style="display:none">
     <div class="banner">
       <img src="https://giapha-nam-viet.github.io/assets/bannerphaphe.png" 
-           alt="Banner Phả đồ" 
-           onerror="this.style.display='none'">
+           alt="Banner Phả đồ" onerror="this.style.display='none'">
+      <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="document.querySelector('.tab[data-tab=\'danh-tinh\']').click(); document.getElementById('addPersonBtn').click();">+</button>
     </div>
-    
     <div class="card">
       <p class="empty-state">
         <strong>Phả đồ đang được xây dựng.</strong><br>
-        Sẽ hiển thị cây gia phả dạng đồ thị với các đường nối cha-con.<br>
-        <em>(Phiên bản tiếp theo)</em>
+        Sẽ hiển thị cây gia phả dạng đồ thị với các đường nối cha-con.
       </p>
     </div>
   </section>
@@ -116,15 +119,13 @@
   <section class="tab-content" id="tab-ngoai-pha" style="display:none">
     <div class="banner">
       <img src="https://giapha-nam-viet.github.io/assets/bannerngoapha.png" 
-           alt="Banner Ngoại phả" 
-           onerror="this.style.display='none'">
+           alt="Banner Ngoại phả" onerror="this.style.display='none'">
+      <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="document.querySelector('.tab[data-tab=\'danh-tinh\']').click(); document.getElementById('addPersonBtn').click();">+</button>
     </div>
-    
     <div class="card">
       <h2 class="card__title">GHI CHÚ &amp; NGHI VẤN CẦN KIỂM CHỨNG</h2>
       <p class="empty-state">Chưa có ghi chú nào.</p>
     </div>
-    
     <div class="card">
       <h2 class="card__title">TƯ LIỆU &amp; HÌNH ẢNH BỔ SUNG</h2>
       <p class="empty-state">Chưa có tư liệu.</p>
@@ -133,16 +134,14 @@
 
 </main>
 
-<!-- ===== FOOTER ===== -->
 <footer class="footer">
   <p>© 2026 Gia phả họ Phạm - Nam Việt | Dự án GiaPhaNamViet</p>
 </footer>
 
-<!-- ===== MODAL ĐĂNG NHẬP ===== -->
 <div class="modal" id="loginModal" style="display:none">
   <div class="modal__content">
     <h3>Đăng nhập</h3>
-    <p>Nhập email của bạn để nhận link đăng nhập (magic link):</p>
+    <p>Nhập email của bạn để nhận link đăng nhập:</p>
     <input type="email" id="loginEmail" placeholder="email@gmail.com" class="input">
     <div class="modal__actions">
       <button class="btn btn--primary" id="sendMagicLink">Gửi link đăng nhập</button>
@@ -152,7 +151,6 @@
   </div>
 </div>
 
-<!-- ===== JS ===== -->
 <script src="app.js"></script>
 
 </body>
