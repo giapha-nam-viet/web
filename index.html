@@ -8,7 +8,10 @@
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Noto+Serif:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Noto+Serif:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
   
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="form.css">
@@ -37,8 +40,6 @@
 </nav>
 
 <main class="main">
-
-  <!-- TAB TRANG CHỦ -->
   <section class="tab-content" id="tab-trang-chu">
     <div class="banner">
       <img src="https://giapha-nam-viet.github.io/assets/bannertrang%20chu.png" alt="Banner Trang chủ" onerror="this.style.display='none'">
@@ -54,7 +55,6 @@
     </div>
   </section>
 
-  <!-- TAB DANH TÍNH -->
   <section class="tab-content" id="tab-danh-tinh" style="display:none">
     <div class="banner">
       <img src="https://giapha-nam-viet.github.io/assets/bannerdanhtinh.png" alt="Banner Danh tính" onerror="this.style.display='none'">
@@ -91,7 +91,6 @@
     </div>
   </section>
 
-  <!-- TAB PHẢ ĐỒ -->
   <section class="tab-content" id="tab-pha-do" style="display:none">
     <div class="banner">
       <img src="https://giapha-nam-viet.github.io/assets/bannerphaphe.png" alt="Banner Phả đồ" onerror="this.style.display='none'">
@@ -102,7 +101,6 @@
     </div>
   </section>
 
-  <!-- TAB NGOẠI PHẢ -->
   <section class="tab-content" id="tab-ngoai-pha" style="display:none">
     <div class="banner">
       <img src="https://giapha-nam-viet.github.io/assets/bannerngoapha.png" alt="Banner Ngoại phả" onerror="this.style.display='none'">
@@ -117,13 +115,13 @@
       <p class="empty-state">Chưa có tư liệu.</p>
     </div>
   </section>
-
 </main>
 
 <footer class="footer">
   <p>© 2026 Gia phả họ Phạm - Nam Việt | Dự án GiaPhaNamViet</p>
 </footer>
 
+<!-- MODAL ĐĂNG NHẬP -->
 <div class="modal" id="loginModal" style="display:none">
   <div class="modal__content">
     <h3>Đăng nhập</h3>
@@ -137,7 +135,7 @@
   </div>
 </div>
 
-<!-- FORM MODAL -->
+<!-- ============ FORM MODAL - THÊM/SỬA CÁ NHÂN ============ -->
 <div class="form-modal" id="personFormModal" style="display:none">
   <div class="form-modal__content">
     <div class="form-modal__header">
@@ -145,17 +143,21 @@
       <button class="form-modal__close" onclick="closePersonForm()">×</button>
     </div>
     <div class="form-modal__body">
+      
+      <!-- ẢNH ĐẠI DIỆN -->
       <div class="form-section">
         <label class="form-label">Ảnh đại diện (tỷ lệ 3:4)</label>
         <div class="avatar-upload">
           <div class="avatar-preview" id="avatarPreview"><span class="avatar-preview__placeholder">📷</span></div>
           <div class="avatar-actions">
-            <input type="file" id="avatarInput" accept="image/*" style="display:none" onchange="handleAvatarUpload(event)">
+            <input type="file" id="avatarInput" accept="image/*" style="display:none" onchange="openCropModal(event)">
             <button class="btn btn--ghost btn--small" onclick="document.getElementById('avatarInput').click()">📷 Chọn tệp ảnh</button>
-            <p class="form-hint">Gợi ý: 900×1200 px. Tự động crop + nén WebP.</p>
+            <p class="form-hint">Chọn ảnh → tự cắt tỷ lệ 3:4 → tự nén WebP.</p>
           </div>
         </div>
       </div>
+
+      <!-- THÔNG TIN CƠ BẢN -->
       <div class="form-section">
         <h3 class="form-section__title">THÔNG TIN CƠ BẢN</h3>
         <div class="form-row">
@@ -233,6 +235,8 @@
           </div>
         </div>
       </div>
+
+      <!-- QUAN HỆ GIA ĐÌNH -->
       <div class="form-section">
         <h3 class="form-section__title">QUAN HỆ GIA ĐÌNH</h3>
         <div class="form-row">
@@ -245,32 +249,31 @@
             <select class="form-input" id="motherId"><option value="">-- Chọn mẹ --</option></select>
           </div>
         </div>
-        <div class="form-row">
-          <div class="form-group form-group--full">
-            <label class="form-label">💑 Nhận vợ/chồng</label>
-            <select class="form-input" id="spouseId"><option value="">-- Chọn vợ/chồng --</option></select>
+        
+        <!-- VỢ/CHỒNG - Dynamic List -->
+        <div class="form-group">
+          <label class="form-label">💑 Nhận vợ/chồng</label>
+          <div class="spouse-rows" id="spouseRows">
+            <!-- Sẽ được thêm động -->
           </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Thứ tự vợ/chồng</label>
-            <select class="form-input" id="spouseOrder">
-              <option value="">-- Chọn --</option>
-              <option value="1">Chính thất (vợ/chồng đầu)</option>
-              <option value="2">Kế thất (vợ/chồng thứ 2)</option>
-              <option value="3">Thứ thất (vợ/chồng thứ 3+)</option>
-            </select>
-          </div>
+          <button type="button" class="btn btn--ghost btn--small" onclick="addSpouseRow()" style="width: fit-content;">
+            + Thêm vợ/chồng
+          </button>
+          <p class="form-hint">Nếu người này chỉ có 1 vợ/chồng, chỉ cần chọn 1 dòng.</p>
         </div>
       </div>
+
+      <!-- CON CÁI -->
       <div class="form-section">
         <h3 class="form-section__title">CON CÁI</h3>
         <div class="form-actions-inline">
           <button type="button" class="btn btn--ghost btn--small" onclick="openAddChildModal()">+ Thêm con</button>
           <button type="button" class="btn btn--ghost btn--small" onclick="openQuickAddModal()">⚡ Gán nhanh tên các con</button>
         </div>
-        <div class="children-list" id="childrenList"><p class="empty-hint">Chưa có con nào. Bấm "+ Thêm con" để thêm.</p></div>
+        <div class="children-list" id="childrenList"><p class="empty-hint">Chưa có con nào.</p></div>
       </div>
+
+      <!-- THÔNG TIN CÁ NHÂN -->
       <div class="form-section">
         <h3 class="form-section__title">THÔNG TIN CÁ NHÂN</h3>
         <div class="form-row">
@@ -285,6 +288,8 @@
           <button type="button" class="btn btn--ghost btn--small" onclick="addContactRow()">+ Thêm mục liên hệ</button>
         </div>
       </div>
+
+      <!-- TIỂU SỬ -->
       <div class="form-section">
         <h3 class="form-section__title">TIỂU SỬ</h3>
         <div class="form-group">
@@ -297,12 +302,41 @@
         </div>
       </div>
     </div>
+
     <div class="form-modal__footer">
       <div class="form-modal__footer-left">
         <button type="button" class="btn btn--ghost" onclick="closePersonForm()">❌ Hủy</button>
       </div>
       <div class="form-modal__footer-right">
         <button type="button" class="btn btn--primary" onclick="savePerson()">💾 Lưu</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CROP ẢNH -->
+<div class="form-modal" id="cropModal" style="display:none">
+  <div class="crop-modal__content">
+    <div class="form-modal__header">
+      <h2 class="form-modal__title">CẮT ẢNH (Tỷ lệ 3:4)</h2>
+      <button class="form-modal__close" onclick="closeCropModal()">×</button>
+    </div>
+    <div class="crop-modal__image-container">
+      <img id="cropImage" src="" alt="Ảnh để cắt">
+    </div>
+    <div class="crop-modal__tools">
+      <button class="btn btn--ghost btn--small" onclick="rotateCropImage(90)">🔄 Xoay 90°</button>
+      <button class="btn btn--ghost btn--small" onclick="rotateCropImage(-90)">🔄 Xoay -90°</button>
+      <button class="btn btn--ghost btn--small" onclick="flipCropImage('h')">↔️ Lật ngang</button>
+      <button class="btn btn--ghost btn--small" onclick="flipCropImage('v')">↕️ Lật dọc</button>
+      <button class="btn btn--ghost btn--small" onclick="resetCropImage()">↺ Đặt lại</button>
+    </div>
+    <div class="form-modal__footer">
+      <div class="form-modal__footer-left">
+        <button type="button" class="btn btn--ghost" onclick="closeCropModal()">Hủy</button>
+      </div>
+      <div class="form-modal__footer-right">
+        <button type="button" class="btn btn--primary" onclick="confirmCrop()">✂️ Cắt &amp; Lưu</button>
       </div>
     </div>
   </div>
@@ -349,13 +383,13 @@
         <button type="button" class="btn btn--ghost" onclick="closeAddChildModal()">Hủy</button>
       </div>
       <div class="form-modal__footer-right">
-        <button type="button" class="btn btn--primary" onclick="confirmAddChild()">Thêm vào danh sách</button>
+        <button type="button" class="btn btn--primary" onclick="confirmAddChild()">Thêm</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- MODAL GÁN NHANH -->
+<!-- MODAL GÁN NHANH TÊN CON -->
 <div class="form-modal form-modal--small" id="quickAddModal" style="display:none">
   <div class="form-modal__content">
     <div class="form-modal__header">
@@ -364,15 +398,16 @@
     </div>
     <div class="form-modal__body">
       <div class="form-hint-box">
-        <p><strong>Hướng dẫn:</strong> Mỗi dòng 1 người, cách nhau bằng dấu "|"</p>
-        <p><strong>Format:</strong> Họ tên | Năm sinh | Giới tính | Loại con</p>
-        <p><strong>Loại con:</strong> Con chung / Con riêng / Con nuôi / Con ngoài giá thú</p>
+        <p><strong>Hướng dẫn:</strong> Mỗi dòng 1 người con.</p>
+        <p><strong>Chỉ cần nhập HỌ TÊN.</strong> Hệ thống tự đoán giới tính.</p>
+        <p>Ví dụ:</p>
+        <p style="font-family: monospace; font-style: normal; padding-left: 12px;">Phạm Văn Hùng<br>Phạm Thị Ngọc Oanh<br>Phạm Văn Hải</p>
       </div>
       <div class="form-group">
         <label class="form-label">Danh sách con</label>
-        <textarea class="form-input form-input--textarea form-input--mono" id="quickAddText" rows="8" placeholder="Phạm Văn A | 1980 | Nam | Con chung
-Phạm Thị B | 1983 | Nữ | Con chung
-Phạm Văn C | 1985 | Nam | Con nuôi"></textarea>
+        <textarea class="form-input form-input--textarea form-input--mono" id="quickAddText" rows="10" placeholder="Phạm Văn Hùng
+Phạm Thị Ngọc Oanh
+Phạm Văn Hải"></textarea>
       </div>
     </div>
     <div class="form-modal__footer">

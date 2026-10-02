@@ -1,6 +1,5 @@
 /* ============================================
-   GIA PHẢ NAM VIỆT - APP.JS (v1.7)
-   Cặp vợ chồng cùng hàng, đúng thứ tự
+   GIA PHẢ NAM VIỆT - APP.JS (v1.8)
    ============================================ */
 
 const SUPABASE_URL = 'https://bqojzghxgdkrfyhnvpku.supabase.co';
@@ -142,9 +141,7 @@ async function checkAuthSession() {
     sbClient.auth.onAuthStateChange((_event, session) => {
       updateAuthUI(session?.user || null);
     });
-  } catch (err) {
-    console.error('Lỗi kiểm tra session:', err);
-  }
+  } catch (err) { console.error('Lỗi session:', err); }
 }
 
 function updateAuthUI(user) {

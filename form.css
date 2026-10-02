@@ -1,9 +1,10 @@
 /* ============================================
-   FORM STYLES - GIA PHẢ NAM VIỆT
-   File: form.css
+   FORM STYLES - GIA PHẢ NAM VIỆT (v1.3)
+   - Font chữ dễ đọc (Inter, chữ nghiêng cho input)
+   - Hỗ trợ crop ảnh
+   - Hỗ trợ nhiều vợ/chồng (dynamic list)
    ============================================ */
 
-/* ===== MODAL OVERLAY ===== */
 .form-modal {
   position: fixed;
   inset: 0;
@@ -20,8 +21,8 @@
   background: #FFFFFF;
   border-radius: 16px;
   width: 100%;
-  max-width: 720px;
-  max-height: 90vh;
+  max-width: 760px;
+  max-height: 92vh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 20px 60px rgba(1, 40, 94, 0.3);
@@ -29,18 +30,12 @@
 }
 
 .form-modal--small .form-modal__content {
-  max-width: 520px;
+  max-width: 560px;
 }
 
 @keyframes modalFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+  from { opacity: 0; transform: translateY(20px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* ===== HEADER ===== */
@@ -48,7 +43,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 24px;
+  padding: 16px 24px;
   border-bottom: 2px solid #E8DCA0;
   background: #F5EEB3;
   border-radius: 16px 16px 0 0;
@@ -86,15 +81,15 @@
 
 /* ===== BODY ===== */
 .form-modal__body {
-  padding: 24px;
+  padding: 22px 24px;
   overflow-y: auto;
   flex: 1;
 }
 
 /* ===== SECTIONS ===== */
 .form-section {
-  margin-bottom: 28px;
-  padding-bottom: 20px;
+  margin-bottom: 26px;
+  padding-bottom: 18px;
   border-bottom: 1px dashed #E8DCA0;
 }
 
@@ -106,7 +101,7 @@
 
 .form-section__title {
   font-family: 'Noto Serif', serif;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   color: #C49504;
   text-transform: uppercase;
@@ -116,37 +111,37 @@
   border-left: 4px solid #C49504;
 }
 
-/* ===== FORM ROWS & GROUPS ===== */
+/* ===== FORM ROWS ===== */
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 14px;
+  gap: 14px;
+  margin-bottom: 12px;
 }
 
 @media (max-width: 600px) {
-  .form-row {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
+  .form-row { grid-template-columns: 1fr; gap: 10px; }
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .form-group--full {
   grid-column: 1 / -1;
 }
 
-/* ===== LABELS ===== */
+/* ===== LABELS — Chữ đứng, đậm, dễ đọc ===== */
 .form-label {
-  font-size: 13px;
+  font-family: 'Inter', 'Roboto', 'Be Vietnam Pro', sans-serif;
+  font-style: normal;
   font-weight: 600;
-  color: #01285E;
-  margin-bottom: 2px;
+  font-size: 14px;
+  color: #1A202C;
+  margin-bottom: 3px;
+  line-height: 1.4;
 }
 
 .required {
@@ -154,18 +149,20 @@
   font-weight: 700;
 }
 
-/* ===== INPUTS ===== */
+/* ===== INPUTS — Chữ nghiêng, dễ đọc ===== */
 .form-input {
   width: 100%;
   padding: 10px 14px;
   border: 1.5px solid #E8DCA0;
   border-radius: 8px;
-  font-family: 'Be Vietnam Pro', sans-serif;
-  font-size: 14px;
-  color: #01285E;
+  font-family: 'Inter', 'Roboto', 'Be Vietnam Pro', sans-serif;
+  font-style: italic;
+  font-size: 15px;
+  color: #2D3748;
   background: #FFFFFF;
   transition: all 0.2s;
   box-sizing: border-box;
+  line-height: 1.6;
 }
 
 .form-input:focus {
@@ -175,20 +172,21 @@
 }
 
 .form-input::placeholder {
-  color: #99AACC;
+  color: #A0AEC0;
   font-style: italic;
 }
 
 .form-input--textarea {
   resize: vertical;
-  min-height: 60px;
-  line-height: 1.6;
-  font-family: 'Be Vietnam Pro', sans-serif;
+  min-height: 80px;
+  line-height: 1.7;
 }
 
 .form-input--mono {
   font-family: 'Courier New', monospace;
-  font-size: 13px;
+  font-style: normal;
+  font-size: 14px;
+  line-height: 1.7;
 }
 
 select.form-input {
@@ -199,14 +197,15 @@ select.form-input {
   background-position: right 10px center;
   background-size: 16px;
   padding-right: 36px;
+  font-style: normal;
 }
 
 /* ===== HINT ===== */
 .form-hint {
   font-size: 12px;
-  color: #99AACC;
+  color: #A0AEC0;
   font-style: italic;
-  margin: 4px 0 0 0;
+  margin: 3px 0 0 0;
   line-height: 1.4;
 }
 
@@ -215,28 +214,21 @@ select.form-input {
   border-left: 4px solid #C49504;
   padding: 12px 16px;
   border-radius: 6px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
   font-size: 13px;
-  color: #01285E;
+  color: #2D3748;
   line-height: 1.7;
+  font-style: italic;
 }
 
-.form-hint-box p {
-  margin: 0 0 4px 0;
-}
-
-.form-hint-box p:last-child {
-  margin-bottom: 0;
-}
-
-.form-hint-box strong {
-  color: #8B6D00;
-}
+.form-hint-box p { margin: 0 0 4px 0; }
+.form-hint-box p:last-child { margin-bottom: 0; }
+.form-hint-box strong { color: #8B6D00; font-style: normal; }
 
 /* ===== AVATAR UPLOAD ===== */
 .avatar-upload {
   display: flex;
-  gap: 20px;
+  gap: 18px;
   align-items: flex-start;
 }
 
@@ -272,12 +264,52 @@ select.form-input {
   gap: 8px;
 }
 
+/* ===== CROP MODAL ===== */
+.crop-modal__content {
+  background: #FFFFFF;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 700px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(1, 40, 94, 0.3);
+}
+
+.crop-modal__image-container {
+  flex: 1;
+  overflow: hidden;
+  background: #1A202C;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  min-height: 300px;
+}
+
+.crop-modal__image-container img {
+  max-width: 100%;
+  max-height: 500px;
+  display: block;
+}
+
+.crop-modal__tools {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px;
+  background: #F5EEB3;
+  border-top: 1px solid #E8DCA0;
+  border-bottom: 1px solid #E8DCA0;
+  flex-wrap: wrap;
+}
+
 /* ===== BUTTONS ===== */
 .btn {
   padding: 10px 20px;
   border: none;
   border-radius: 8px;
-  font-family: 'Be Vietnam Pro', sans-serif;
+  font-family: 'Inter', 'Roboto', 'Be Vietnam Pro', sans-serif;
+  font-style: normal;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -288,19 +320,11 @@ select.form-input {
   justify-content: center;
 }
 
-.btn--primary {
-  background: #C49504;
-  color: #FFFFFF;
-}
-
+.btn--primary { background: #C49504; color: #FFFFFF; }
 .btn--primary:hover {
   background: #8B6D00;
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(196, 149, 4, 0.3);
-}
-
-.btn--primary:active {
-  transform: translateY(0);
 }
 
 .btn--ghost {
@@ -308,7 +332,6 @@ select.form-input {
   color: #01285E;
   border: 1.5px solid #C9B896;
 }
-
 .btn--ghost:hover {
   background: #F5EEB3;
   border-color: #C49504;
@@ -319,19 +342,65 @@ select.form-input {
   font-size: 13px;
 }
 
-/* ===== FORM ACTIONS INLINE ===== */
+/* ===== FORM ACTIONS ===== */
 .form-actions-inline {
   display: flex;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
   flex-wrap: wrap;
 }
+
+/* ===== SPOUSE LIST (Nhiều vợ/chồng) ===== */
+.spouse-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.spouse-row {
+  display: grid;
+  grid-template-columns: 100px 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.spouse-row__label {
+  font-family: 'Inter', 'Roboto', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #627794;
+  font-style: normal;
+}
+
+.spouse-row select {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1.5px solid #E8DCA0;
+  border-radius: 6px;
+  font-family: 'Inter', 'Roboto', sans-serif;
+  font-size: 14px;
+  color: #2D3748;
+  background: #FFFFFF;
+}
+
+.spouse-row__remove {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  color: #C62828;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+.spouse-row__remove:hover { background: #FFEBEE; }
 
 /* ===== CHILDREN LIST ===== */
 .children-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .child-item {
@@ -344,26 +413,22 @@ select.form-input {
   border: 1px solid #E8DCA0;
   border-radius: 8px;
   font-size: 14px;
+  animation: slideIn 0.2s ease;
 }
 
-.child-item__info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
+.child-item__info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .child-item__name {
+  font-family: 'Inter', 'Roboto', sans-serif;
   font-weight: 600;
   color: #01285E;
+  font-style: normal;
 }
-
-.child-item__meta {
-  font-size: 12px;
-  color: #627794;
-  font-style: italic;
-}
-
+.child-item__meta { font-size: 12px; color: #627794; font-style: italic; }
 .child-item__type {
   font-size: 11px;
   padding: 2px 8px;
@@ -372,13 +437,9 @@ select.form-input {
   color: #8B6D00;
   font-weight: 600;
   white-space: nowrap;
+  font-style: normal;
 }
-
-.child-item__actions {
-  display: flex;
-  gap: 6px;
-}
-
+.child-item__actions { display: flex; gap: 6px; }
 .child-item__btn {
   background: transparent;
   border: none;
@@ -388,17 +449,14 @@ select.form-input {
   border-radius: 6px;
   transition: all 0.2s;
 }
-
-.child-item__btn:hover {
-  background: #F5EEB3;
-}
+.child-item__btn:hover { background: #F5EEB3; }
 
 .empty-hint {
   text-align: center;
-  color: #99AACC;
+  color: #A0AEC0;
   font-style: italic;
   font-size: 13px;
-  padding: 20px;
+  padding: 18px;
   margin: 0;
   background: #FAFAF7;
   border-radius: 8px;
@@ -424,9 +482,11 @@ select.form-input {
   padding: 8px 12px;
   border: 1.5px solid #E8DCA0;
   border-radius: 6px;
-  font-size: 13px;
-  font-family: 'Be Vietnam Pro', sans-serif;
-  color: #01285E;
+  font-size: 14px;
+  font-family: 'Inter', 'Roboto', sans-serif;
+  font-style: italic;
+  color: #2D3748;
+  line-height: 1.5;
 }
 
 .contact-row input:focus {
@@ -443,12 +503,8 @@ select.form-input {
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 6px;
-  transition: all 0.2s;
 }
-
-.contact-row__remove:hover {
-  background: #FFEBEE;
-}
+.contact-row__remove:hover { background: #FFEBEE; }
 
 /* ===== FOOTER ===== */
 .form-modal__footer {
@@ -456,7 +512,7 @@ select.form-input {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 24px;
+  padding: 14px 24px;
   border-top: 2px solid #E8DCA0;
   background: #FAFAF7;
   border-radius: 0 0 16px 16px;
@@ -468,81 +524,22 @@ select.form-input {
   gap: 10px;
 }
 
-.form-modal__footer .btn {
-  min-width: 100px;
-}
+.form-modal__footer .btn { min-width: 100px; }
 
 /* ===== RESPONSIVE ===== */
 @media (max-width: 600px) {
-  .form-modal {
-    padding: 10px;
-    align-items: flex-start;
-  }
-  
-  .form-modal__content {
-    max-height: 95vh;
-    border-radius: 12px;
-  }
-  
-  .form-modal__header {
-    padding: 14px 18px;
-  }
-  
-  .form-modal__title {
-    font-size: 17px;
-  }
-  
-  .form-modal__body {
-    padding: 18px;
-  }
-  
-  .form-modal__footer {
-    padding: 12px 18px;
-    flex-direction: column;
-    gap: 10px;
-  }
-  
-  .form-modal__footer-left,
-  .form-modal__footer-right {
-    width: 100%;
-  }
-  
-  .form-modal__footer .btn {
-    flex: 1;
-  }
-  
-  .avatar-upload {
-    flex-direction: column;
-    align-items: center;
-  }
-  
-  .avatar-preview {
-    width: 100px;
-    height: 133px;
-  }
-  
-  .contact-row {
-    grid-template-columns: 1fr;
-    gap: 6px;
-  }
-  
-  .contact-row__remove {
-    justify-self: end;
-  }
-}
-
-/* ===== ANIMATION FOR CHILD ITEM ===== */
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateX(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.child-item {
-  animation: slideIn 0.2s ease;
+  .form-modal { padding: 10px; align-items: flex-start; }
+  .form-modal__content { max-height: 95vh; border-radius: 12px; }
+  .form-modal__header { padding: 12px 16px; }
+  .form-modal__title { font-size: 16px; }
+  .form-modal__body { padding: 16px; }
+  .form-modal__footer { padding: 12px 16px; flex-direction: column; gap: 10px; }
+  .form-modal__footer-left, .form-modal__footer-right { width: 100%; }
+  .form-modal__footer .btn { flex: 1; }
+  .avatar-upload { flex-direction: column; align-items: center; }
+  .avatar-preview { width: 100px; height: 133px; }
+  .contact-row { grid-template-columns: 1fr; gap: 6px; }
+  .contact-row__remove { justify-self: end; }
+  .spouse-row { grid-template-columns: 1fr; gap: 4px; }
+  .spouse-row__remove { justify-self: end; }
 }
