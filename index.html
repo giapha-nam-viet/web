@@ -11,6 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Noto+Serif:wght@400;700&display=swap" rel="stylesheet">
   
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="form.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -42,7 +43,7 @@
     <div class="banner">
       <img src="https://giapha-nam-viet.github.io/assets/bannertrang%20chu.png" 
            alt="Banner Trang chủ" onerror="this.style.display='none'">
-      <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="document.querySelector('.tab[data-tab=\'danh-tinh\']').click(); document.getElementById('addPersonBtn').click();">+</button>
+      <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="openPersonForm()">+</button>
     </div>
     
     <div class="card">
@@ -65,10 +66,9 @@
     <div class="banner">
       <img src="https://giapha-nam-viet.github.io/assets/bannerdanhtinh.png" 
            alt="Banner Danh tính" onerror="this.style.display='none'">
-      <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="document.getElementById('addPersonBtn').click();">+</button>
+      <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="openPersonForm()">+</button>
     </div>
     
-    <!-- SUB TABS: Lọc theo Đời / Chi -->
     <div class="sub-tabs">
       <div class="sub-tabs__group">
         <span class="sub-tabs__label">Đời:</span>
@@ -91,7 +91,7 @@
     <div class="card">
       <div class="toolbar">
         <input type="text" id="searchInput" placeholder="🔍 Tìm tên (không dấu cũng được)..." class="search-input">
-        <button class="btn btn--primary" id="addPersonBtn">+ Thêm cá nhân</button>
+        <button class="btn btn--primary" id="addPersonBtn" onclick="openPersonForm()">+ Thêm cá nhân</button>
       </div>
       
       <div class="person-grid" id="personGrid">
@@ -103,9 +103,9 @@
   <!-- TAB PHẢ ĐỒ -->
   <section class="tab-content" id="tab-pha-do" style="display:none">
     <div class="banner">
-      <img src="https://giapha-nam-viet.github.io/assets/banner-pha-do.png" 
+      <img src="https://giapha-nam-viet.github.io/assets/bannerphaphe.png" 
            alt="Banner Phả đồ" onerror="this.style.display='none'">
-      <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="document.querySelector('.tab[data-tab=\'danh-tinh\']').click(); document.getElementById('addPersonBtn').click();">+</button>
+      <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="openPersonForm()">+</button>
     </div>
     <div class="card">
       <p class="empty-state">
@@ -118,9 +118,9 @@
   <!-- TAB NGOẠI PHẢ -->
   <section class="tab-content" id="tab-ngoai-pha" style="display:none">
     <div class="banner">
-      <img src="https://giapha-nam-viet.github.io/assets/banner-ngoai-pha.png" 
+      <img src="https://giapha-nam-viet.github.io/assets/bannerngoapha.png" 
            alt="Banner Ngoại phả" onerror="this.style.display='none'">
-      <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="document.querySelector('.tab[data-tab=\'danh-tinh\']').click(); document.getElementById('addPersonBtn').click();">+</button>
+      <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="openPersonForm()">+</button>
     </div>
     <div class="card">
       <h2 class="card__title">GHI CHÚ &amp; NGHI VẤN CẦN KIỂM CHỨNG</h2>
@@ -151,7 +151,25 @@
   </div>
 </div>
 
+<!-- Include form.html nội dung -->
+<div id="formContainer"></div>
+
 <script src="app.js"></script>
+<script src="form.js"></script>
+
+<!-- Load form.html vào container -->
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const response = await fetch('form.html');
+    const html = await response.text();
+    document.getElementById('formContainer').innerHTML = html;
+    console.log('✅ Đã load form.html');
+  } catch (err) {
+    console.error('❌ Lỗi load form.html:', err);
+  }
+});
+</script>
 
 </body>
 </html>
