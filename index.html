@@ -39,10 +39,17 @@
   <button class="tab" data-tab="ngoai-pha">Ngoại phả</button>
 </nav>
 
+<!-- 3 NÚT ĐIỀU HƯỚNG ← → TRỞ VỀ -->
+<div class="nav-controls">
+  <button class="nav-btn" id="btnNavBack" title="Quay lại">←</button>
+  <button class="nav-btn" id="btnNavForward" title="Tiến tới">→</button>
+  <button class="nav-btn nav-btn--home" id="btnNavHome" title="Về Trang chủ">🏠 TRỞ VỀ</button>
+</div>
+
 <main class="main">
   <section class="tab-content" id="tab-trang-chu">
     <div class="banner">
-      <img src="https://giapha-nam-viet.github.io/assets/bannertrang%20chu.png" alt="Banner Trang chủ" onerror="this.style.display='none'">
+      <img src="banner-trang-chu.png" alt="Banner Trang chủ" onerror="this.style.display='none'">
       <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="openPersonForm()">+</button>
     </div>
     <div class="card">
@@ -57,7 +64,7 @@
 
   <section class="tab-content" id="tab-danh-tinh" style="display:none">
     <div class="banner">
-      <img src="https://giapha-nam-viet.github.io/assets/bannerdanhtinh.png" alt="Banner Danh tính" onerror="this.style.display='none'">
+      <img src="banner-danh-tinh.png" alt="Banner Danh tính" onerror="this.style.display='none'">
       <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="openPersonForm()">+</button>
     </div>
     
@@ -93,7 +100,7 @@
 
   <section class="tab-content" id="tab-pha-do" style="display:none">
     <div class="banner">
-      <img src="https://giapha-nam-viet.github.io/assets/bannerphaphe.png" alt="Banner Phả đồ" onerror="this.style.display='none'">
+      <img src="banner-pha-do.png" alt="Banner Phả đồ" onerror="this.style.display='none'">
       <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="openPersonForm()">+</button>
     </div>
     <div class="card">
@@ -103,16 +110,25 @@
 
   <section class="tab-content" id="tab-ngoai-pha" style="display:none">
     <div class="banner">
-      <img src="https://giapha-nam-viet.github.io/assets/bannerngoapha.png" alt="Banner Ngoại phả" onerror="this.style.display='none'">
+      <img src="banner-ngoai-pha.png" alt="Banner Ngoại phả" onerror="this.style.display='none'">
       <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="openPersonForm()">+</button>
     </div>
+
     <div class="card">
-      <h2 class="card__title">GHI CHÚ &amp; NGHI VẤN CẦN KIỂM CHỨNG</h2>
-      <div id="notesList"><p class="empty-state">Chưa có ghi chú nào.</p></div>
-    </div>
-    <div class="card">
-      <h2 class="card__title">TƯ LIỆU &amp; HÌNH ẢNH BỔ SUNG</h2>
-      <p class="empty-state">Chưa có tư liệu.</p>
+      <h2 class="card__title">BÀI VIẾT VỀ HÀNH TRẠNG, LỊCH SỬ DÒNG HỌ VÀ TƯ LIỆU</h2>
+
+      <div class="topic-filters" role="tablist">
+        <button class="topic-chip topic-chip--active" data-topic="all">Tất cả</button>
+        <button class="topic-chip" data-topic="Lịch sử dòng họ">Lịch sử dòng họ</button>
+        <button class="topic-chip" data-topic="Văn hoá Xã hội">Văn hoá Xã hội</button>
+        <button class="topic-chip" data-topic="Phong tục Tập quán">Phong tục Tập quán</button>
+        <button class="topic-chip" data-topic="Hành trạng cá nhân">Hành trạng cá nhân</button>
+        <button class="topic-chip" data-topic="Tư liệu hình ảnh">Tư liệu hình ảnh</button>
+      </div>
+
+      <div id="notesList" class="notes-list">
+        <p class="empty-state">Đang tải bài viết...</p>
+      </div>
     </div>
   </section>
 </main>
