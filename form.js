@@ -235,10 +235,19 @@ function renderPersonView(person, spouseNames, fatherName, motherName) {
 
 function renderViewFooter() {
   const footer = document.getElementById('personFormFooter');
+  const deleteBtn = currentEditingPersonId
+    ? '<button type="button" class="btn btn--danger" onclick="deletePerson()">🗑️ XÓA</button>'
+    : '';
+  
   footer.innerHTML = 
-    '<button type="button" class="btn btn--primary" onclick="switchToEditMode()">✏️ SỬA</button>' +
-    '<button type="button" class="btn btn--ghost" onclick="closePersonForm()">TRỞ VỀ</button>' +
-    '<button type="button" class="btn btn--ghost btn--block" onclick="goToPhaDo()">ĐẾN PHẢ ĐỒ</button>';
+    '<div class="form-modal__footer-left">' +
+      '<button type="button" class="btn btn--ghost" onclick="closePersonForm()">TRỞ VỀ</button>' +
+      deleteBtn +
+    '</div>' +
+    '<div class="form-modal__footer-right">' +
+      '<button type="button" class="btn btn--ghost" onclick="goToPhaDo()">ĐẾN PHẢ ĐỒ</button>' +
+      '<button type="button" class="btn btn--primary" onclick="switchToEditMode()">✏️ SỬA</button>' +
+    '</div>';
 }
 
 function switchToEditMode() {
@@ -264,17 +273,13 @@ function showEditMode() {
 
 function renderEditFooter() {
   const footer = document.getElementById('personFormFooter');
-  const deleteBtn = currentEditingPersonId 
-    ? '<button type="button" class="btn btn--danger" onclick="deletePerson()">🗑️ Xóa</button>'
-    : '';
   
   footer.innerHTML = 
     '<div class="form-modal__footer-left">' +
-      '<button type="button" class="btn btn--ghost" onclick="closePersonForm()">❌ Hủy</button>' +
-      deleteBtn +
+      '<button type="button" class="btn btn--ghost" onclick="cancelEdit()">❌ HỦY</button>' +
     '</div>' +
     '<div class="form-modal__footer-right">' +
-      '<button type="button" class="btn btn--primary" onclick="savePerson()">💾 Lưu</button>' +
+      '<button type="button" class="btn btn--primary" onclick="savePerson()">💾 LƯU</button>' +
     '</div>';
 }
 
