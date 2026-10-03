@@ -136,28 +136,26 @@
 </div>
 
 <!-- ============ FORM MODAL - THÊM/SỬA CÁ NHÂN ============ -->
-<div class="form-modal" id="personFormModal" style="display:none">
+<div class="form-modal" id="personFormModal" style="display:none" onclick="if(event.target===this) closePersonForm()">
   <div class="form-modal__content">
     <div class="form-modal__header">
       <h2 class="form-modal__title" id="formTitle">THÊM CÁ NHÂN MỚI</h2>
-      <button class="form-modal__close" onclick="closePersonForm()">×</button>
+      <button type="button" class="form-modal__close" onclick="closePersonForm()">×</button>
     </div>
     <div class="form-modal__body">
       
-      <!-- ẢNH ĐẠI DIỆN -->
       <div class="form-section">
         <h3 class="form-section__title">ẢNH ĐẠI DIỆN</h3>
         <div class="avatar-upload">
           <div class="avatar-preview" id="avatarPreview"><span class="avatar-preview__placeholder">📷</span></div>
           <div class="avatar-actions">
             <input type="file" id="avatarInput" accept="image/*" style="display:none" onchange="openCropModal(event)">
-            <button class="btn btn--ghost btn--small" onclick="document.getElementById('avatarInput').click()">📷 Chọn tệp ảnh</button>
+            <button type="button" class="btn btn--ghost btn--small" onclick="document.getElementById('avatarInput').click()">📷 Chọn tệp ảnh</button>
             <p class="form-hint">Chọn ảnh → tự cắt tỷ lệ 3:4 → tự nén WebP.</p>
           </div>
         </div>
       </div>
 
-      <!-- THÔNG TIN CƠ BẢN -->
       <div class="form-section">
         <h3 class="form-section__title">THÔNG TIN CƠ BẢN</h3>
         <div class="form-row">
@@ -234,7 +232,6 @@
         </div>
       </div>
 
-      <!-- QUAN HỆ GIA ĐÌNH -->
       <div class="form-section">
         <h3 class="form-section__title">QUAN HỆ GIA ĐÌNH</h3>
         <div class="form-row">
@@ -258,7 +255,6 @@
         </div>
       </div>
 
-      <!-- CON CÁI -->
       <div class="form-section">
         <h3 class="form-section__title">CON CÁI</h3>
         <div class="form-actions-inline">
@@ -268,7 +264,6 @@
         <div class="children-list" id="childrenList"><p class="empty-hint">Chưa có con nào.</p></div>
       </div>
 
-      <!-- THÔNG TIN CÁ NHÂN -->
       <div class="form-section">
         <h3 class="form-section__title">THÔNG TIN CÁ NHÂN</h3>
         <div class="form-row">
@@ -284,7 +279,6 @@
         </div>
       </div>
 
-      <!-- TIỂU SỬ -->
       <div class="form-section">
         <h3 class="form-section__title">TIỂU SỬ</h3>
         <div class="form-group">
@@ -297,7 +291,6 @@
         </div>
       </div>
 
-      <!-- BÀI VIẾT LIÊN QUAN -->
       <div class="form-section">
         <h3 class="form-section__title">BÀI VIẾT LIÊN QUAN Ở NGOẠI PHẢ</h3>
         <p class="form-hint">Bấm đúp vào tiêu đề bài viết để chuyển tới bài viết đó ở tab Ngoại phả.</p>
@@ -309,7 +302,6 @@
         </button>
       </div>
 
-      <!-- NGƯỜI ĐĂNG -->
       <div class="form-section">
         <h3 class="form-section__title">NGƯỜI ĐĂNG THÔNG TIN</h3>
         <div class="form-row">
@@ -335,21 +327,21 @@
 </div>
 
 <!-- MODAL CROP ẢNH -->
-<div class="form-modal" id="cropModal" style="display:none">
+<div class="form-modal" id="cropModal" style="display:none" onclick="if(event.target===this) closeCropModal()">
   <div class="crop-modal__content">
     <div class="form-modal__header">
       <h2 class="form-modal__title">CẮT ẢNH (Tỷ lệ 3:4)</h2>
-      <button class="form-modal__close" onclick="closeCropModal()">×</button>
+      <button type="button" class="form-modal__close" onclick="closeCropModal()">×</button>
     </div>
     <div class="crop-modal__image-container">
       <img id="cropImage" src="" alt="Ảnh để cắt">
     </div>
     <div class="crop-modal__tools">
-      <button class="btn btn--ghost btn--small" onclick="rotateCropImage(90)">🔄 Xoay 90°</button>
-      <button class="btn btn--ghost btn--small" onclick="rotateCropImage(-90)">🔄 Xoay -90°</button>
-      <button class="btn btn--ghost btn--small" onclick="flipCropImage('h')">↔️ Lật ngang</button>
-      <button class="btn btn--ghost btn--small" onclick="flipCropImage('v')">↕️ Lật dọc</button>
-      <button class="btn btn--ghost btn--small" onclick="resetCropImage()">↺ Đặt lại</button>
+      <button type="button" class="btn btn--ghost btn--small" onclick="rotateCropImage(90)">🔄 Xoay 90°</button>
+      <button type="button" class="btn btn--ghost btn--small" onclick="rotateCropImage(-90)">🔄 Xoay -90°</button>
+      <button type="button" class="btn btn--ghost btn--small" onclick="flipCropImage('h')">↔️ Lật ngang</button>
+      <button type="button" class="btn btn--ghost btn--small" onclick="flipCropImage('v')">↕️ Lật dọc</button>
+      <button type="button" class="btn btn--ghost btn--small" onclick="resetCropImage()">↺ Đặt lại</button>
     </div>
     <div class="form-modal__footer">
       <div class="form-modal__footer-left">
@@ -363,11 +355,11 @@
 </div>
 
 <!-- MODAL LIÊN KẾT BÀI VIẾT -->
-<div class="form-modal form-modal--small" id="linkNoteModal" style="display:none">
+<div class="form-modal form-modal--small" id="linkNoteModal" style="display:none" onclick="if(event.target===this) closeLinkNoteModal()">
   <div class="form-modal__content">
     <div class="form-modal__header">
       <h2 class="form-modal__title">LIÊN KẾT BÀI VIẾT NGOẠI PHẢ</h2>
-      <button class="form-modal__close" onclick="closeLinkNoteModal()">×</button>
+      <button type="button" class="form-modal__close" onclick="closeLinkNoteModal()">×</button>
     </div>
     <div class="form-modal__body">
       <p class="form-hint">Chọn bài viết muốn liên kết với người này.</p>
@@ -387,11 +379,11 @@
 </div>
 
 <!-- MODAL THÊM CON -->
-<div class="form-modal form-modal--small" id="addChildModal" style="display:none">
+<div class="form-modal form-modal--small" id="addChildModal" style="display:none" onclick="if(event.target===this) closeAddChildModal()">
   <div class="form-modal__content">
     <div class="form-modal__header">
       <h2 class="form-modal__title">THÊM CON</h2>
-      <button class="form-modal__close" onclick="closeAddChildModal()">×</button>
+      <button type="button" class="form-modal__close" onclick="closeAddChildModal()">×</button>
     </div>
     <div class="form-modal__body">
       <div class="form-group">
@@ -434,11 +426,11 @@
 </div>
 
 <!-- MODAL GÁN NHANH -->
-<div class="form-modal form-modal--small" id="quickAddModal" style="display:none">
+<div class="form-modal form-modal--small" id="quickAddModal" style="display:none" onclick="if(event.target===this) closeQuickAddModal()">
   <div class="form-modal__content">
     <div class="form-modal__header">
       <h2 class="form-modal__title">GÁN NHANH TÊN CÁC CON</h2>
-      <button class="form-modal__close" onclick="closeQuickAddModal()">×</button>
+      <button type="button" class="form-modal__close" onclick="closeQuickAddModal()">×</button>
     </div>
     <div class="form-modal__body">
       <div class="form-hint-box">
