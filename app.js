@@ -1,5 +1,8 @@
 /* ============================================
-   GIA PHẢ NAM VIỆT - APP.JS (v1.8)
+   GIA PHẢ NAM VIỆT - APP.JS (v1.9)
+   - Sửa "Đời thứ nhất" (bỏ Thủy tổ)
+   - Thêm 5 chủ đề Ngoại phả
+   - Thêm 3 nút điều hướng ← → TRỞ VỀ
    ============================================ */
 
 const SUPABASE_URL = 'https://bqojzghxgdkrfyhnvpku.supabase.co';
@@ -19,46 +22,111 @@ try {
 let allPersons = [];
 let allMarriages = [];
 let allParentChild = [];
+let allNotes = [];
 let filteredPersons = [];
 let currentUser = null;
 let currentFilter = { generation: null, branch: null };
+let currentTopic = 'all';
 
 window.allPersons = allPersons;
+window.allNotes = allNotes;
 window.currentUser = currentUser;
 
+/* ============================================
+   KHỞI ĐỘNG
+   ============================================ */
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('🚀 Gia Phả Nam Việt đang khởi động...');
   setupTabs();
+  setupNavigation();
   setupAuth();
   setupSearch();
   setupSubTabs();
   setupAddPerson();
+  setupTopicFilters();
   await checkAuthSession();
   await loadSettings();
   await loadAllData();
+  await loadNotes();
 });
 
-function setupTabs() {
+/* ============================================
+   TAB CHÍNH + HISTORY (Back/Forward)
+   ============================================ */
+function switchTab(tabId, push = true) {
   const tabs = document.querySelectorAll('.tab');
   const contents = document.querySelectorAll('.tab-content');
-  tabs.forEach(tab => {
+  
+  tabs.forEach(t => {
+    t.classList.toggle('tab--active', t.dataset.tab === tabId);
+  });
+  contents.forEach(c => {
+    c.style.display = c.id === 'tab-' + tabId ? 'block' : 'none';
+  });
+  
+  if (push) {
+    history.pushState({ tab: tabId }, '', '#' + tabId);
+  }
+  updateNavButtons();
+}
+
+function setupTabs() {
+  document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {
-      const target = tab.dataset.tab;
-      tabs.forEach(t => t.classList.remove('tab--active'));
-      tab.classList.add('tab--active');
-      contents.forEach(c => c.style.display = 'none');
-      const content = document.getElementById('tab-' + target);
-      if (content) content.style.display = 'block';
-      window.location.hash = target;
+      switchTab(tab.dataset.tab, true);
     });
   });
+  
+  // Đọc hash ban đầu
   const hash = window.location.hash.replace('#', '');
   if (hash) {
     const tab = document.querySelector('.tab[data-tab="' + hash + '"]');
-    if (tab) tab.click();
+    if (tab) {
+      // Không push lại, chỉ replace
+      history.replaceState({ tab: hash }, '', '#' + hash);
+      switchTab(hash, false);
+      return;
+    }
   }
+  // Mặc định trang chủ
+  history.replaceState({ tab: 'trang-chu' }, '', '#trang-chu');
+  switchTab('trang-chu', false);
 }
 
+/* ============================================
+   3 NÚT ĐIỀU HƯỚNG ← → TRỞ VỀ
+   ============================================ */
+function setupNavigation() {
+  // Lắng nghe popstate (nút back/forward của trình duyệt)
+  window.addEventListener('popstate', (e) => {
+    const tabId = (e.state && e.state.tab) || 'trang-chu';
+    switchTab(tabId, false);
+  });
+  
+  // Nút ←
+  const btnBack = document.getElementById('btnNavBack');
+  if (btnBack) btnBack.addEventListener('click', () => history.back());
+  
+  // Nút →
+  const btnForward = document.getElementById('btnNavForward');
+  if (btnForward) btnForward.addEventListener('click', () => history.forward());
+  
+  // Nút TRỞ VỀ (về Trang chủ)
+  const btnHome = document.getElementById('btnNavHome');
+  if (btnHome) btnHome.addEventListener('click', () => switchTab('trang-chu', true));
+}
+
+function updateNavButtons() {
+  const btnBack = document.getElementById('btnNavBack');
+  const btnForward = document.getElementById('btnNavForward');
+  // Không có cách chuẩn để biết có thể back/forward, nhưng có thể disable nút khi ở trang đầu
+  if (btnBack) btnBack.disabled = (history.length <= 1);
+  // Forward luôn enable — trình duyệt tự bỏ qua nếu không có gì
+}
+
+/* ============================================
+   TABS PHỤ (Đời / Chi)
+   ============================================ */
 function setupSubTabs() {
   document.querySelectorAll('.sub-tab').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -78,6 +146,9 @@ function setupSubTabs() {
   });
 }
 
+/* ============================================
+   AUTH
+   ============================================ */
 function setupAuth() {
   const loginBtn = document.getElementById('loginBtn');
   const logoutBtn = document.getElementById('logoutBtn');
@@ -163,6 +234,9 @@ function updateAuthUI(user) {
   }
 }
 
+/* ============================================
+   SETTINGS
+   ============================================ */
 async function loadSettings() {
   if (!sbClient) return;
   try {
@@ -179,6 +253,9 @@ async function loadSettings() {
   } catch (err) { console.error('Lỗi load settings:', err); }
 }
 
+/* ============================================
+   DỮ LIỆU CHÍNH (PERSONS + MARRIAGES + PARENT_CHILD)
+   ============================================ */
 async function loadAllData() {
   const grid = document.getElementById('personGrid');
   if (!grid) return;
@@ -222,6 +299,29 @@ function getSpouses(personId) {
   return spouseIds.map(id => allPersons.find(p => p.id === id)).filter(Boolean);
 }
 
+/* ============================================
+   NHÃN "ĐỜI THỨ ..." — KHÔNG DÙNG "THỦY TỔ"
+   ============================================ */
+function getGenerationLabel(gen) {
+  const n = parseInt(gen, 10);
+  const map = {
+    1: "Đời thứ nhất",
+    2: "Đời thứ hai",
+    3: "Đời thứ ba",
+    4: "Đời thứ tư",
+    5: "Đời thứ năm",
+    6: "Đời thứ sáu",
+    7: "Đời thứ bảy",
+    8: "Đời thứ tám",
+    9: "Đời thứ chín",
+    10: "Đời thứ mười"
+  };
+  return map[n] || ('Đời thứ ' + n);
+}
+
+/* ============================================
+   RENDER DANH SÁCH NGƯỜI
+   ============================================ */
 function renderPersons() {
   const grid = document.getElementById('personGrid');
   if (!grid) return;
@@ -254,14 +354,12 @@ function renderPersons() {
 
     const genTitle = document.createElement('div');
     genTitle.className = 'generation-section__title';
-    let titleText = 'Đời thứ ' + gen;
-    if (gen === '1' || gen === 1) titleText = 'Đời thứ 1 — Thủy tổ';
-    genTitle.textContent = titleText;
+    genTitle.textContent = getGenerationLabel(gen);
     genSection.appendChild(genTitle);
 
     const header = document.createElement('div');
     header.className = 'people-header';
-    header.innerHTML = 
+    header.innerHTML =
       '<div class="people-header__col">Huyết thống</div>' +
       '<div class="people-header__col">Phối ngẫu</div>';
     genSection.appendChild(header);
@@ -269,7 +367,7 @@ function renderPersons() {
     if (huyetThong.length === 0) {
       const emptyRow = document.createElement('div');
       emptyRow.className = 'couple-row';
-      emptyRow.innerHTML = 
+      emptyRow.innerHTML =
         '<div><p class="empty-state" style="padding:20px;font-size:14px;">Chưa có dữ liệu</p></div>' +
         '<div></div>';
       genSection.appendChild(emptyRow);
@@ -320,13 +418,13 @@ function createPersonMini(person) {
   const dateParts = [];
   if (person.birth_year) dateParts.push(person.birth_year);
   if (person.death_year) dateParts.push(person.death_year);
-  const dateStr = dateParts.length === 2 
+  const dateStr = dateParts.length === 2
     ? dateParts[0] + ' - ' + dateParts[1]
     : (dateParts[0] ? String(dateParts[0]) : '');
 
-  const genStr = person.generation ? 'Đời ' + person.generation : '';
+  const genStr = person.generation ? getGenerationLabel(person.generation) : '';
 
-  card.innerHTML = 
+  card.innerHTML =
     '<div class="' + nameClass + '">' + (person.full_name || '(chưa có tên)') + '</div>' +
     (dateStr ? '<div class="person-mini__dates">' + dateStr + '</div>' : '') +
     (genStr ? '<div class="person-mini__generation">' + genStr + '</div>' : '');
@@ -334,6 +432,9 @@ function createPersonMini(person) {
   return card;
 }
 
+/* ============================================
+   TÌM KIẾM + LỌC
+   ============================================ */
 function setupSearch() {
   const searchInput = document.getElementById('searchInput');
   if (searchInput) searchInput.addEventListener('input', applyFilters);
@@ -360,6 +461,9 @@ function removeVietnameseTones(str) {
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
 }
 
+/* ============================================
+   NÚT THÊM NGƯỜI
+   ============================================ */
 function setupAddPerson() {
   const btn = document.getElementById('addPersonBtn');
   if (!btn) return;
@@ -377,6 +481,90 @@ function setupAddPerson() {
   });
 }
 
+/* ============================================
+   NGOẠI PHẢ — 5 CHỦ ĐỀ
+   ============================================ */
+const TOPICS = {
+  all: 'Tất cả',
+  'Lịch sử dòng họ': 'Lịch sử dòng họ',
+  'Văn hoá Xã hội': 'Văn hoá Xã hội',
+  'Phong tục Tập quán': 'Phong tục Tập quán',
+  'Hành trạng cá nhân': 'Hành trạng cá nhân',
+  'Tư liệu hình ảnh': 'Tư liệu hình ảnh'
+};
+
+function setupTopicFilters() {
+  document.querySelectorAll('.topic-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.topic-chip').forEach(b => b.classList.remove('topic-chip--active'));
+      btn.classList.add('topic-chip--active');
+      currentTopic = btn.dataset.topic;
+      renderNotes();
+    });
+  });
+}
+
+async function loadNotes() {
+  if (!sbClient) return;
+  try {
+    const { data, error } = await sbClient
+      .from('notes')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    allNotes = data || [];
+    window.allNotes = allNotes;
+    console.log('✅ Đã load ' + allNotes.length + ' bài viết');
+    renderNotes();
+  } catch (err) {
+    console.error('Lỗi load notes:', err);
+    const list = document.getElementById('notesList');
+    if (list) list.innerHTML = '<p class="empty-state">❌ Không tải được bài viết.</p>';
+  }
+}
+
+function renderNotes() {
+  const list = document.getElementById('notesList');
+  if (!list) return;
+
+  let notes = allNotes;
+  if (currentTopic !== 'all') {
+    notes = notes.filter(n => n.category === currentTopic);
+  }
+
+  if (!notes || notes.length === 0) {
+    list.innerHTML = '<p class="empty-state">Chưa có bài viết nào trong chủ đề này.</p>';
+    return;
+  }
+
+  list.innerHTML = '';
+  notes.forEach(note => {
+    const card = document.createElement('article');
+    card.className = 'note-card';
+    card.dataset.id = note.id;
+
+    const catLabel = note.category
+      ? '<span class="note-card__category">' + note.category + '</span>'
+      : '';
+
+    card.innerHTML =
+      catLabel +
+      '<h3 class="note-card__title">' + (note.title || '(chưa có tiêu đề)') + '</h3>' +
+      '<p class="note-card__meta">' +
+        (note.author_name ? '✍️ ' + note.author_name + ' · ' : '') +
+        (note.created_at ? new Date(note.created_at).toLocaleDateString('vi-VN') : '') +
+      '</p>' +
+      '<div class="note-card__excerpt">' +
+        (note.content ? note.content.substring(0, 200) + (note.content.length > 200 ? '...' : '') : '') +
+      '</div>';
+
+    list.appendChild(card);
+  });
+}
+
+/* ============================================
+   HELPER
+   ============================================ */
 function formatText(text) {
   if (!text) return '';
   let content = text;
@@ -388,4 +576,4 @@ function formatText(text) {
   return String(content).split('\n').map(line => '<p>' + line + '</p>').join('');
 }
 
-console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT', 'font-size: 20px; color: #01285E; font-weight: bold;');
+console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v1.9)', 'font-size: 20px; color: #01285E; font-weight: bold;');
