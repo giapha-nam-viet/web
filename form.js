@@ -1,6 +1,6 @@
 /* ============================================
-   FORM LOGIC - GIA PHẢ NAM VIỆT (v2.0)
-   Viết lại hoàn toàn - Đơn giản, chắc chắn
+   FORM LOGIC - GIA PHẢ NAM VIỆT (v2.1)
+   Dùng class 'is-visible' để hiện/ẩn form
    ============================================ */
 
 let currentEditingPersonId = null;
@@ -11,34 +11,36 @@ let tempLinkedNoteIds = [];
 let allNotesCache = [];
 
 /* ============================================
-   PHẦN 0: HÀM ĐÓNG FORM - CỰC KỲ QUAN TRỌNG
-   Tất cả hàm đóng form đều dùng hàm chung này
+   HÀM HIỆN / ẨN FORM — DÙNG CLASS
    ============================================ */
-function closeModal(modalId) {
-  console.log('🔒 Đóng modal:', modalId);
+function showModal(modalId) {
   const modal = document.getElementById(modalId);
   if (modal) {
-    modal.style.display = 'none';
-    modal.setAttribute('hidden', 'true');
+    modal.classList.add('is-visible');
+    console.log('👁️ Hiện form:', modalId);
   }
 }
 
-// Hàm đóng TẤT CẢ form (dùng cho ESC)
-function closeAllModals() {
-  console.log('🔒 Đóng TẤT CẢ form');
-  document.querySelectorAll('.form-modal').forEach(m => {
-    m.style.display = 'none';
-  });
-  document.body.style.overflow = '';
+function hideModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (modal) {
+    modal.classList.remove('is-visible');
+    console.log('🔒 Ẩn form:', modalId);
+  }
 }
 
-/* ============================================
-   GẮN SỰ KIỆN ESC ĐỂ ĐÓNG FORM
-   ============================================ */
+function hideAllModals() {
+  document.querySelectorAll('.form-modal').forEach(m => {
+    m.classList.remove('is-visible');
+  });
+  document.body.style.overflow = '';
+  console.log('🔒 Ẩn TẤT CẢ form');
+}
+
+/* ESC để đóng tất cả form */
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape' || e.keyCode === 27) {
-    console.log('⌨️ Bấm ESC - đóng tất cả form');
-    closeAllModals();
+    hideAllModals();
   }
 });
 
@@ -53,11 +55,10 @@ function openPersonForm(personId) {
   tempAvatarData = null;
   tempLinkedNoteIds = [];
   
-  const modal = document.getElementById('personFormModal');
   const title = document.getElementById('formTitle');
   const deleteBtn = document.getElementById('deletePersonBtn');
   
-  if (!modal) {
+  if (!document.getElementById('personFormModal')) {
     alert('⚠️ Lỗi: Không tìm thấy form.');
     return;
   }
@@ -79,14 +80,13 @@ function openPersonForm(personId) {
   renderTempChildren();
   renderLinkedNotes();
   
-  modal.style.display = 'flex';
-  modal.removeAttribute('hidden');
+  showModal('personFormModal');
   document.body.style.overflow = 'hidden';
 }
 
 function closePersonForm() {
   if (!confirm('Bạn có chắc muốn hủy? Mọi thay đổi chưa lưu sẽ mất.')) return;
-  closeModal('personFormModal');
+  hideModal('personFormModal');
   document.body.style.overflow = '';
   currentEditingPersonId = null;
   tempChildrenList = [];
@@ -134,7 +134,7 @@ async function autoFillCreatedByName() {
     } else if (nameInput && window.currentUser.email) {
       nameInput.value = window.currentUser.email;
     }
-  } catch (err) { console.error('autoFill error:', err); }
+  } catch (err) { console.error(err); }
 }
 
 /* ============================================
@@ -154,7 +154,7 @@ function openCropModal(event) {
     const img = document.getElementById('cropImage');
     if (!img) return;
     img.src = e.target.result;
-    document.getElementById('cropModal').style.display = 'flex';
+    showModal('cropModal');
     
     img.onload = () => {
       if (cropper) cropper.destroy();
@@ -169,7 +169,7 @@ function openCropModal(event) {
   reader.readAsDataURL(file);
 }
 
-function closeCropModal() { closeModal('cropModal'); }
+function closeCropModal() { hideModal('cropModal'); }
 function rotateCropImage(d) { if (cropper) cropper.rotate(d); }
 function flipCropImage(dir) { if (cropper) dir === 'h' ? cropper.scaleX(-1) : cropper.scaleY(-1); }
 function resetCropImage() { if (cropper) cropper.reset(); }
@@ -194,7 +194,6 @@ function confirmCrop() {
    ============================================ */
 function populateRelationDropdowns() {
   const persons = window.allPersons || [];
-  
   const f = document.getElementById('fatherId');
   const m = document.getElementById('motherId');
   if (!f || !m) return;
@@ -268,15 +267,14 @@ function getSpouseRowsData() {
    5. THÊM CON
    ============================================ */
 function openAddChildModal() {
-  const m = document.getElementById('addChildModal');
-  if (m) m.style.display = 'flex';
+  showModal('addChildModal');
   ['childName', 'childBirthYear', 'childOrder'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
 }
 
-function closeAddChildModal() { closeModal('addChildModal'); }
+function closeAddChildModal() { hideModal('addChildModal'); }
 
 function confirmAddChild() {
   const name = document.getElementById('childName').value.trim();
@@ -325,18 +323,15 @@ function removeTempChild(tempId) {
 }
 
 /* ============================================
-   6. GÁN NHANH TÊN CON
+   6. GÁN NHANH
    ============================================ */
 function openQuickAddModal() {
-  const m = document.getElementById('quickAddModal');
-  if (m) {
-    m.style.display = 'flex';
-    const t = document.getElementById('quickAddText');
-    if (t) t.value = '';
-  }
+  showModal('quickAddModal');
+  const t = document.getElementById('quickAddText');
+  if (t) t.value = '';
 }
 
-function closeQuickAddModal() { closeModal('quickAddModal'); }
+function closeQuickAddModal() { hideModal('quickAddModal'); }
 
 function confirmQuickAdd() {
   const text = document.getElementById('quickAddText').value.trim();
@@ -416,7 +411,7 @@ function removeLinkedNote(id) {
 function goToNote(noteId) {
   const tab = document.querySelector('.tab[data-tab="ngoai-pha"]');
   if (tab) tab.click();
-  closeModal('personFormModal');
+  hideModal('personFormModal');
   document.body.style.overflow = '';
 }
 
@@ -427,7 +422,7 @@ async function openLinkNoteModal() {
   
   if (allNotesCache.length === 0) {
     list.innerHTML = '<p class="empty-hint">Chưa có bài viết nào.</p>';
-    document.getElementById('linkNoteModal').style.display = 'flex';
+    showModal('linkNoteModal');
     return;
   }
   
@@ -439,10 +434,10 @@ async function openLinkNoteModal() {
     '</label>';
   }).join('');
   
-  document.getElementById('linkNoteModal').style.display = 'flex';
+  showModal('linkNoteModal');
 }
 
-function closeLinkNoteModal() { closeModal('linkNoteModal'); }
+function closeLinkNoteModal() { hideModal('linkNoteModal'); }
 
 function confirmLinkNote() {
   const cbs = document.querySelectorAll('#availableNotesList input[type="checkbox"]:checked');
@@ -452,7 +447,7 @@ function confirmLinkNote() {
 }
 
 /* ============================================
-   8. THÔNG TIN LIÊN HỆ
+   8. LIÊN HỆ
    ============================================ */
 function addContactRow() {
   const list = document.getElementById('contactList');
@@ -547,7 +542,12 @@ async function savePerson() {
     }
     
     alert('✅ Đã lưu thành công!');
-    closePersonForm();
+    hideModal('personFormModal');
+    document.body.style.overflow = '';
+    currentEditingPersonId = null;
+    tempChildrenList = [];
+    tempAvatarData = null;
+    tempLinkedNoteIds = [];
     
     if (typeof loadAllData === 'function') await loadAllData();
   } catch (err) {
@@ -580,7 +580,7 @@ async function deletePerson() {
     await window.sbClient.from('persons').delete().eq('id', currentEditingPersonId);
     
     alert('✅ Đã xóa!');
-    closeModal('personFormModal');
+    hideModal('personFormModal');
     document.body.style.overflow = '';
     currentEditingPersonId = null;
     
@@ -666,7 +666,7 @@ async function createChildWithAutoCreate(parentId, parentGen, childData, spouseI
 }
 
 /* ============================================
-   12. LOAD DỮ LIỆU ĐỂ SỬA
+   12. LOAD PERSON FOR EDIT
    ============================================ */
 async function loadPersonForEdit(personId) {
   if (!window.sbClient) return;
@@ -756,4 +756,4 @@ async function loadPersonForEdit(personId) {
   }
 }
 
-console.log('📝 Form.js v2.0 loaded - Có ESC + click outside + 4 chỗ đóng form');
+console.log('📝 Form.js v2.1 loaded - Dùng class is-visible');

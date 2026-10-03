@@ -136,7 +136,7 @@
 </div>
 
 <!-- ============ FORM MODAL - THÊM/SỬA CÁ NHÂN ============ -->
-<div class="form-modal" id="personFormModal" style="display:none" onclick="if(event.target===this) closePersonForm()">
+<div class="form-modal" id="personFormModal" onclick="if(event.target===this) closePersonForm()">
   <div class="form-modal__content">
     <div class="form-modal__header">
       <h2 class="form-modal__title" id="formTitle">THÊM CÁ NHÂN MỚI</h2>
@@ -307,7 +307,7 @@
         <div class="form-row">
           <div class="form-group form-group--full">
             <label class="form-label">Tên người đăng</label>
-            <input type="text" class="form-input" id="createdByName" placeholder="Tự động lấy từ tài khoản. Có thể sửa nếu cần.">
+            <input type="text" class="form-input" id="createdByName" placeholder="Tự động lấy từ tài khoản.">
             <p class="form-hint">Hệ thống tự động điền tên từ tài khoản đang đăng nhập.</p>
           </div>
         </div>
@@ -327,7 +327,7 @@
 </div>
 
 <!-- MODAL CROP ẢNH -->
-<div class="form-modal" id="cropModal" style="display:none" onclick="if(event.target===this) closeCropModal()">
+<div class="form-modal" id="cropModal" onclick="if(event.target===this) closeCropModal()">
   <div class="crop-modal__content">
     <div class="form-modal__header">
       <h2 class="form-modal__title">CẮT ẢNH (Tỷ lệ 3:4)</h2>
@@ -355,7 +355,7 @@
 </div>
 
 <!-- MODAL LIÊN KẾT BÀI VIẾT -->
-<div class="form-modal form-modal--small" id="linkNoteModal" style="display:none" onclick="if(event.target===this) closeLinkNoteModal()">
+<div class="form-modal form-modal--small" id="linkNoteModal" onclick="if(event.target===this) closeLinkNoteModal()">
   <div class="form-modal__content">
     <div class="form-modal__header">
       <h2 class="form-modal__title">LIÊN KẾT BÀI VIẾT NGOẠI PHẢ</h2>
@@ -379,7 +379,7 @@
 </div>
 
 <!-- MODAL THÊM CON -->
-<div class="form-modal form-modal--small" id="addChildModal" style="display:none" onclick="if(event.target===this) closeAddChildModal()">
+<div class="form-modal form-modal--small" id="addChildModal" onclick="if(event.target===this) closeAddChildModal()">
   <div class="form-modal__content">
     <div class="form-modal__header">
       <h2 class="form-modal__title">THÊM CON</h2>
@@ -426,7 +426,7 @@
 </div>
 
 <!-- MODAL GÁN NHANH -->
-<div class="form-modal form-modal--small" id="quickAddModal" style="display:none" onclick="if(event.target===this) closeQuickAddModal()">
+<div class="form-modal form-modal--small" id="quickAddModal" onclick="if(event.target===this) closeQuickAddModal()">
   <div class="form-modal__content">
     <div class="form-modal__header">
       <h2 class="form-modal__title">GÁN NHANH TÊN CÁC CON</h2>
