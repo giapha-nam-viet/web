@@ -144,8 +144,9 @@
     </div>
     <div class="form-modal__body">
       
+      <!-- ẢNH ĐẠI DIỆN -->
       <div class="form-section">
-        <label class="form-label">Ảnh đại diện (tỷ lệ 3:4)</label>
+        <h3 class="form-section__title">ẢNH ĐẠI DIỆN</h3>
         <div class="avatar-upload">
           <div class="avatar-preview" id="avatarPreview"><span class="avatar-preview__placeholder">📷</span></div>
           <div class="avatar-actions">
@@ -156,6 +157,7 @@
         </div>
       </div>
 
+      <!-- THÔNG TIN CƠ BẢN -->
       <div class="form-section">
         <h3 class="form-section__title">THÔNG TIN CƠ BẢN</h3>
         <div class="form-row">
@@ -164,6 +166,14 @@
             <select class="form-input" id="roleType" required>
               <option value="Huyết thống">Huyết thống</option>
               <option value="Dâu/Rể">Dâu/Rể (kết hôn vào dòng họ)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Giới tính <span class="required">*</span></label>
+            <select class="form-input" id="gender" required>
+              <option value="">-- Chọn --</option>
+              <option value="Nam">Nam</option>
+              <option value="Nữ">Nữ</option>
             </select>
           </div>
         </div>
@@ -175,11 +185,13 @@
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Giới tính <span class="required">*</span></label>
-            <select class="form-input" id="gender" required>
-              <option value="">-- Chọn --</option>
-              <option value="Nam">Nam</option>
-              <option value="Nữ">Nữ</option>
+            <label class="form-label">Đời thứ</label>
+            <select class="form-input" id="generation">
+              <option value="1">Đời 1</option>
+              <option value="2">Đời 2</option>
+              <option value="3">Đời 3</option>
+              <option value="4">Đời 4</option>
+              <option value="5">Đời 5</option>
             </select>
           </div>
           <div class="form-group">
@@ -189,18 +201,12 @@
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Thứ bậc trong anh chị em</label>
+            <label class="form-label">Thứ tự sinh (1 = con đầu)</label>
             <input type="number" class="form-input" id="siblingOrder" placeholder="1, 2, 3..." min="1" max="20">
           </div>
           <div class="form-group">
-            <label class="form-label">Đời thứ</label>
-            <select class="form-input" id="generation">
-              <option value="1">Đời 1</option>
-              <option value="2">Đời 2</option>
-              <option value="3">Đời 3</option>
-              <option value="4">Đời 4</option>
-              <option value="5">Đời 5</option>
-            </select>
+            <label class="form-label">Nơi sinh</label>
+            <input type="text" class="form-input" id="birthPlace" placeholder="VD: Thôn Mai Hoàng">
           </div>
         </div>
         <div class="form-row">
@@ -211,12 +217,6 @@
           <div class="form-group">
             <label class="form-label">Năm mất</label>
             <input type="number" class="form-input" id="deathYear" placeholder="VD: 2020" min="1800" max="2026">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group form-group--full">
-            <label class="form-label">Nơi sinh</label>
-            <input type="text" class="form-input" id="birthPlace" placeholder="VD: Thôn Mai Hoàng, xã Đồng Bàn">
           </div>
         </div>
         <div class="form-row">
@@ -234,6 +234,7 @@
         </div>
       </div>
 
+      <!-- QUAN HỆ GIA ĐÌNH -->
       <div class="form-section">
         <h3 class="form-section__title">QUAN HỆ GIA ĐÌNH</h3>
         <div class="form-row">
@@ -257,6 +258,7 @@
         </div>
       </div>
 
+      <!-- CON CÁI -->
       <div class="form-section">
         <h3 class="form-section__title">CON CÁI</h3>
         <div class="form-actions-inline">
@@ -266,6 +268,7 @@
         <div class="children-list" id="childrenList"><p class="empty-hint">Chưa có con nào.</p></div>
       </div>
 
+      <!-- THÔNG TIN CÁ NHÂN -->
       <div class="form-section">
         <h3 class="form-section__title">THÔNG TIN CÁ NHÂN</h3>
         <div class="form-row">
@@ -281,6 +284,7 @@
         </div>
       </div>
 
+      <!-- TIỂU SỬ -->
       <div class="form-section">
         <h3 class="form-section__title">TIỂU SỬ</h3>
         <div class="form-group">
@@ -293,6 +297,7 @@
         </div>
       </div>
 
+      <!-- BÀI VIẾT LIÊN QUAN -->
       <div class="form-section">
         <h3 class="form-section__title">BÀI VIẾT LIÊN QUAN Ở NGOẠI PHẢ</h3>
         <p class="form-hint">Bấm đúp vào tiêu đề bài viết để chuyển tới bài viết đó ở tab Ngoại phả.</p>
@@ -304,13 +309,14 @@
         </button>
       </div>
 
+      <!-- NGƯỜI ĐĂNG -->
       <div class="form-section">
         <h3 class="form-section__title">NGƯỜI ĐĂNG THÔNG TIN</h3>
         <div class="form-row">
           <div class="form-group form-group--full">
             <label class="form-label">Tên người đăng</label>
             <input type="text" class="form-input" id="createdByName" placeholder="Tự động lấy từ tài khoản. Có thể sửa nếu cần.">
-            <p class="form-hint">Hệ thống tự động điền tên từ tài khoản đang đăng nhập. Nếu admin sửa giúp người khác, có thể sửa tên tại đây.</p>
+            <p class="form-hint">Hệ thống tự động điền tên từ tài khoản đang đăng nhập.</p>
           </div>
         </div>
       </div>
@@ -412,7 +418,7 @@
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Thứ bậc trong anh chị em</label>
+        <label class="form-label">Thứ tự sinh (1 = con đầu)</label>
         <input type="number" class="form-input" id="childOrder" placeholder="1, 2, 3..." min="1" max="20">
       </div>
     </div>

@@ -1,12 +1,13 @@
 /* ============================================
-   FORM LOGIC - GIA PHẢ NAM VIỆT (v1.3)
+   FORM LOGIC - GIA PHẢ NAM VIỆT (v1.4)
+   - Fix load dữ liệu khi Sửa
+   - Fix form hiện đúng popup
    - Crop ảnh 3:4 (Cropper.js)
    - Gán nhanh tên con (chỉ họ tên)
    - Nhiều vợ/chồng
    - Xóa người (kiểm tra có con)
    - Liên kết bài viết Ngoại phả
-   - Tên người đăng (auto + sửa được)
-   - Lọc trùng khi render
+   - Tên người đăng
    ============================================ */
 
 let currentEditingPersonId = null;
@@ -31,14 +32,23 @@ function openPersonForm(personId) {
   const title = document.getElementById('formTitle');
   const deleteBtn = document.getElementById('deletePersonBtn');
   
+  if (!modal) {
+    console.error('❌ Không tìm thấy personFormModal!');
+    alert('⚠️ Lỗi: Không tìm thấy form. Vui lòng tải lại trang.');
+    return;
+  }
+  
+  // Reset form trước
+  resetForm();
+  
   if (personId) {
     title.textContent = 'SỬA THÔNG TIN CÁ NHÂN';
-    deleteBtn.style.display = 'inline-flex';
-    loadPersonForEdit(personId);
+    if (deleteBtn) deleteBtn.style.display = 'inline-flex';
+    // Load dữ liệu sau khi form hiện
+    setTimeout(() => loadPersonForEdit(personId), 100);
   } else {
     title.textContent = 'THÊM CÁ NHÂN MỚI';
-    deleteBtn.style.display = 'none';
-    resetForm();
+    if (deleteBtn) deleteBtn.style.display = 'none';
     autoFillCreatedByName();
   }
   
@@ -49,6 +59,8 @@ function openPersonForm(personId) {
   
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
+  
+  console.log('✅ Form đã mở');
 }
 
 function closePersonForm() {
@@ -57,7 +69,8 @@ function closePersonForm() {
 }
 
 function closePersonFormNoConfirm() {
-  document.getElementById('personFormModal').style.display = 'none';
+  const modal = document.getElementById('personFormModal');
+  if (modal) modal.style.display = 'none';
   document.body.style.overflow = '';
   currentEditingPersonId = null;
   tempChildrenList = [];
@@ -79,27 +92,35 @@ function resetForm() {
     }
   });
   
-  document.getElementById('avatarPreview').innerHTML = '<span class="avatar-preview__placeholder">📷</span>';
-  document.getElementById('contactList').innerHTML = '';
-  document.getElementById('spouseRows').innerHTML = '';
+  const avatarPreview = document.getElementById('avatarPreview');
+  if (avatarPreview) avatarPreview.innerHTML = '<span class="avatar-preview__placeholder">📷</span>';
+  
+  const contactList = document.getElementById('contactList');
+  if (contactList) contactList.innerHTML = '';
+  
+  const spouseRows = document.getElementById('spouseRows');
+  if (spouseRows) spouseRows.innerHTML = '';
+  
   renderTempChildren();
   renderLinkedNotes();
 }
 
 async function autoFillCreatedByName() {
-  if (!window.currentUser) return;
-  const { data: profile } = await window.sbClient
-    .from('profiles')
-    .select('display_name')
-    .eq('id', window.currentUser.id)
-    .maybeSingle();
-  
-  const nameInput = document.getElementById('createdByName');
-  if (nameInput && profile && profile.display_name) {
-    nameInput.value = profile.display_name;
-  } else if (nameInput && window.currentUser.email) {
-    nameInput.value = window.currentUser.email;
-  }
+  if (!window.currentUser || !window.sbClient) return;
+  try {
+    const { data: profile } = await window.sbClient
+      .from('profiles')
+      .select('display_name')
+      .eq('id', window.currentUser.id)
+      .maybeSingle();
+    
+    const nameInput = document.getElementById('createdByName');
+    if (nameInput && profile && profile.display_name) {
+      nameInput.value = profile.display_name;
+    } else if (nameInput && window.currentUser.email) {
+      nameInput.value = window.currentUser.email;
+    }
+  } catch (err) { console.error('Lỗi autoFill name:', err); }
 }
 
 /* ============================================
@@ -122,22 +143,25 @@ function openCropModal(event) {
   const reader = new FileReader();
   reader.onload = (e) => {
     const cropImage = document.getElementById('cropImage');
+    if (!cropImage) return;
     cropImage.src = e.target.result;
     document.getElementById('cropModal').style.display = 'flex';
     
     cropImage.onload = () => {
       if (cropper) cropper.destroy();
-      cropper = new Cropper(cropImage, {
-        aspectRatio: 3 / 4,
-        viewMode: 1,
-        autoCropArea: 0.85,
-        responsive: true,
-        background: false,
-        modal: true,
-        guides: true,
-        highlight: false,
-        dragMode: 'move'
-      });
+      if (typeof Cropper !== 'undefined') {
+        cropper = new Cropper(cropImage, {
+          aspectRatio: 3 / 4,
+          viewMode: 1,
+          autoCropArea: 0.85,
+          responsive: true,
+          background: false,
+          modal: true,
+          guides: true,
+          highlight: false,
+          dragMode: 'move'
+        });
+      }
     };
   };
   reader.readAsDataURL(file);
@@ -145,9 +169,12 @@ function openCropModal(event) {
 
 function closeCropModal() {
   if (cropper) { cropper.destroy(); cropper = null; }
-  document.getElementById('cropModal').style.display = 'none';
-  document.getElementById('cropImage').src = '';
-  document.getElementById('avatarInput').value = '';
+  const modal = document.getElementById('cropModal');
+  if (modal) modal.style.display = 'none';
+  const cropImage = document.getElementById('cropImage');
+  if (cropImage) cropImage.src = '';
+  const avatarInput = document.getElementById('avatarInput');
+  if (avatarInput) avatarInput.value = '';
 }
 
 function rotateCropImage(degree) { if (cropper) cropper.rotate(degree); }
@@ -179,7 +206,8 @@ function convertBlobToBase64(blob) {
   const reader = new FileReader();
   reader.onloadend = () => {
     tempAvatarData = reader.result;
-    document.getElementById('avatarPreview').innerHTML = '<img src="' + tempAvatarData + '" alt="Avatar">';
+    const avatarPreview = document.getElementById('avatarPreview');
+    if (avatarPreview) avatarPreview.innerHTML = '<img src="' + tempAvatarData + '" alt="Avatar">';
     closeCropModal();
   };
   reader.readAsDataURL(blob);
@@ -205,13 +233,14 @@ function populateRelationDropdowns() {
 }
 
 /* ============================================
-   4. VỢ/CHỒNG - DYNAMIC LIST
+   4. VỢ/CHỒNG
    ============================================ */
 let spouseRowCounter = 0;
 
 function addSpouseRow() {
   spouseRowCounter++;
   const container = document.getElementById('spouseRows');
+  if (!container) return;
   const rowId = 'spouse_row_' + spouseRowCounter;
   
   const row = document.createElement('div');
@@ -243,7 +272,9 @@ function populateSpouseSelect(select) {
 }
 
 function renderSpouseRows() {
-  document.getElementById('spouseRows').innerHTML = '';
+  const container = document.getElementById('spouseRows');
+  if (!container) return;
+  container.innerHTML = '';
   spouseRowCounter = 0;
   addSpouseRow();
 }
@@ -264,14 +295,19 @@ function getSpouseRowsData() {
    5. QUẢN LÝ CON
    ============================================ */
 function openAddChildModal() {
-  document.getElementById('addChildModal').style.display = 'flex';
-  document.getElementById('childName').value = '';
-  document.getElementById('childBirthYear').value = '';
-  document.getElementById('childOrder').value = '';
+  const modal = document.getElementById('addChildModal');
+  if (modal) modal.style.display = 'flex';
+  const nameEl = document.getElementById('childName');
+  if (nameEl) nameEl.value = '';
+  const yearEl = document.getElementById('childBirthYear');
+  if (yearEl) yearEl.value = '';
+  const orderEl = document.getElementById('childOrder');
+  if (orderEl) orderEl.value = '';
 }
 
 function closeAddChildModal() {
-  document.getElementById('addChildModal').style.display = 'none';
+  const modal = document.getElementById('addChildModal');
+  if (modal) modal.style.display = 'none';
 }
 
 function confirmAddChild() {
@@ -329,12 +365,15 @@ function removeTempChild(tempId) {
    6. GÁN NHANH TÊN CON
    ============================================ */
 function openQuickAddModal() {
-  document.getElementById('quickAddModal').style.display = 'flex';
-  document.getElementById('quickAddText').value = '';
+  const modal = document.getElementById('quickAddModal');
+  if (modal) modal.style.display = 'flex';
+  const textEl = document.getElementById('quickAddText');
+  if (textEl) textEl.value = '';
 }
 
 function closeQuickAddModal() {
-  document.getElementById('quickAddModal').style.display = 'none';
+  const modal = document.getElementById('quickAddModal');
+  if (modal) modal.style.display = 'none';
 }
 
 function confirmQuickAdd() {
@@ -377,7 +416,7 @@ function confirmQuickAdd() {
 }
 
 /* ============================================
-   7. LIÊN KẾT BÀI VIẾT NGOẠI PHẢ
+   7. LIÊN KẾT BÀI VIẾT
    ============================================ */
 async function loadNotesCache() {
   if (!window.sbClient) return;
@@ -385,7 +424,6 @@ async function loadNotesCache() {
     const { data, error } = await window.sbClient
       .from('notes')
       .select('*')
-      .eq('is_published', true)
       .order('created_at', { ascending: false });
     if (error) throw error;
     allNotesCache = data || [];
@@ -406,10 +444,15 @@ function renderLinkedNotes() {
   
   const linkedNotes = allNotesCache.filter(n => tempLinkedNoteIds.includes(n.id));
   
+  if (linkedNotes.length === 0) {
+    list.innerHTML = '<p class="empty-hint">Đang tải bài viết...</p>';
+    return;
+  }
+  
   list.innerHTML = linkedNotes.map(note => 
     '<div class="linked-note-item" ondblclick="goToNote(\'' + note.id + '\')" title="Bấm đúp để chuyển tới bài viết">' +
       '<span class="linked-note-item__icon">📄</span>' +
-      '<span class="linked-note-item__title">' + (note.title || '(Không có tiêu đề)') + '</span>' +
+      '<span class="linked-note-item__title">' + (note.title || note.content.substring(0, 50) || '(Không có tiêu đề)') + '</span>' +
       '<button class="linked-note-item__remove" onclick="event.stopPropagation(); removeLinkedNote(\'' + note.id + '\')" title="Bỏ liên kết">×</button>' +
     '</div>'
   ).join('');
@@ -421,14 +464,9 @@ function removeLinkedNote(noteId) {
 }
 
 function goToNote(noteId) {
-  // Chuyển sang tab Ngoại phả
   const tab = document.querySelector('.tab[data-tab="ngoai-pha"]');
   if (tab) tab.click();
-  
-  // Đóng form
   closePersonFormNoConfirm();
-  
-  // Scroll tới bài viết
   setTimeout(() => {
     const el = document.getElementById('note-' + noteId);
     if (el) {
@@ -442,6 +480,7 @@ function goToNote(noteId) {
 async function openLinkNoteModal() {
   await loadNotesCache();
   const list = document.getElementById('availableNotesList');
+  if (!list) return;
   
   if (allNotesCache.length === 0) {
     list.innerHTML = '<p class="empty-hint">Chưa có bài viết nào ở Ngoại phả.</p>';
@@ -453,7 +492,7 @@ async function openLinkNoteModal() {
     const checked = tempLinkedNoteIds.includes(note.id) ? 'checked' : '';
     return '<label class="note-picker-item">' +
       '<input type="checkbox" value="' + note.id + '" ' + checked + '>' +
-      '<span>' + (note.title || '(Không có tiêu đề)') + '</span>' +
+      '<span>' + (note.title || note.content.substring(0, 50) || '(Không có tiêu đề)') + '</span>' +
     '</label>';
   }).join('');
   
@@ -461,7 +500,8 @@ async function openLinkNoteModal() {
 }
 
 function closeLinkNoteModal() {
-  document.getElementById('linkNoteModal').style.display = 'none';
+  const modal = document.getElementById('linkNoteModal');
+  if (modal) modal.style.display = 'none';
 }
 
 function confirmLinkNote() {
@@ -476,6 +516,7 @@ function confirmLinkNote() {
    ============================================ */
 function addContactRow() {
   const list = document.getElementById('contactList');
+  if (!list) return;
   const row = document.createElement('div');
   row.className = 'contact-row';
   row.innerHTML = 
@@ -500,6 +541,8 @@ function getContactInfo() {
    9. LƯU THÔNG TIN
    ============================================ */
 async function savePerson() {
+  console.log('💾 Bắt đầu lưu...');
+  
   const fullName = document.getElementById('fullName').value.trim();
   const gender = document.getElementById('gender').value;
   
@@ -550,6 +593,7 @@ async function savePerson() {
         .update(personData)
         .eq('id', currentEditingPersonId);
       if (error) throw error;
+      console.log('✅ Đã update person:', currentEditingPersonId);
     } else {
       const { data, error } = await window.sbClient
         .from('persons')
@@ -558,6 +602,7 @@ async function savePerson() {
         .single();
       if (error) throw error;
       personId = data.id;
+      console.log('✅ Đã insert person:', personId);
     }
     
     const fatherId = document.getElementById('fatherId').value;
@@ -590,13 +635,12 @@ async function savePerson() {
 }
 
 /* ============================================
-   10. XÓA NGƯỜI (chỉ khi không có con)
+   10. XÓA NGƯỜI
    ============================================ */
 async function deletePerson() {
   if (!currentEditingPersonId) return;
   if (!window.sbClient) return;
   
-  // Kiểm tra có con không
   const { data: children, error: checkError } = await window.sbClient
     .from('parent_child')
     .select('id')
@@ -612,23 +656,19 @@ async function deletePerson() {
     return;
   }
   
-  // Xác nhận xóa
   const fullName = document.getElementById('fullName').value.trim() || 'người này';
   if (!confirm('⚠️ Bạn có chắc muốn XÓA "' + fullName + '"?\n\nHành động này KHÔNG THỂ HOÀN TÁC!')) return;
   if (!confirm('⚠️ XÁC NHẬN LẦN CUỐI:\n\nXóa "' + fullName + '" khỏi gia phả?')) return;
   
   try {
-    // Xóa liên kết hôn nhân
     await window.sbClient.from('marriages')
       .delete()
       .or('husband_id.eq.' + currentEditingPersonId + ',wife_id.eq.' + currentEditingPersonId);
     
-    // Xóa liên kết cha-mẹ-con
     await window.sbClient.from('parent_child')
       .delete()
       .or('parent_id.eq.' + currentEditingPersonId + ',child_id.eq.' + currentEditingPersonId);
     
-    // Xóa người
     const { error } = await window.sbClient
       .from('persons')
       .delete()
@@ -731,14 +771,29 @@ async function createChildWithAutoCreate(parentId, parentGeneration, childData, 
 }
 
 /* ============================================
-   12. LOAD DỮ LIỆU ĐỂ SỬA
+   12. LOAD DỮ LIỆU ĐỂ SỬA (ĐÃ FIX)
    ============================================ */
 async function loadPersonForEdit(personId) {
+  console.log('📥 Đang load person:', personId);
+  
+  if (!window.sbClient) {
+    alert('⚠️ Chưa kết nối Supabase');
+    return;
+  }
+  
   try {
     const { data: person, error } = await window.sbClient
-      .from('persons').select('*').eq('id', personId).single();
-    if (error) throw error;
+      .from('persons')
+      .select('*')
+      .eq('id', personId)
+      .single();
     
+    if (error) throw error;
+    if (!person) throw new Error('Không tìm thấy người này');
+    
+    console.log('✅ Đã load person:', person.full_name);
+    
+    // Điền dữ liệu vào form
     document.getElementById('fullName').value = person.full_name || '';
     document.getElementById('gender').value = person.gender || '';
     document.getElementById('roleType').value = person.role_type || 'Huyết thống';
@@ -754,11 +809,13 @@ async function loadPersonForEdit(personId) {
     document.getElementById('bio').value = person.bio || '';
     document.getElementById('createdByName').value = person.created_by_name || '';
     
+    // Avatar
     if (person.avatar_url) {
       tempAvatarData = person.avatar_url;
       document.getElementById('avatarPreview').innerHTML = '<img src="' + person.avatar_url + '" alt="Avatar">';
     }
     
+    // Contact info
     if (person.contact_info && Array.isArray(person.contact_info)) {
       const list = document.getElementById('contactList');
       list.innerHTML = '';
@@ -766,16 +823,18 @@ async function loadPersonForEdit(personId) {
         const row = document.createElement('div');
         row.className = 'contact-row';
         row.innerHTML = 
-          '<input type="text" value="' + c.name + '" class="contact-name">' +
-          '<input type="text" value="' + c.value + '" class="contact-value">' +
+          '<input type="text" value="' + (c.name || '') + '" class="contact-name">' +
+          '<input type="text" value="' + (c.value || '') + '" class="contact-value">' +
           '<button type="button" class="contact-row__remove" onclick="this.parentElement.remove()">×</button>';
         list.appendChild(row);
       });
     }
     
     // Load vợ/chồng
-    document.getElementById('spouseRows').innerHTML = '';
+    const spouseContainer = document.getElementById('spouseRows');
+    spouseContainer.innerHTML = '';
     spouseRowCounter = 0;
+    
     const { data: marriages } = await window.sbClient
       .from('marriages').select('*')
       .or('husband_id.eq.' + personId + ',wife_id.eq.' + personId);
@@ -784,7 +843,6 @@ async function loadPersonForEdit(personId) {
       marriages.forEach(m => {
         const spouseId = m.husband_id === personId ? m.wife_id : m.husband_id;
         spouseRowCounter++;
-        const container = document.getElementById('spouseRows');
         const rowId = 'spouse_row_' + spouseRowCounter;
         const row = document.createElement('div');
         row.className = 'spouse-row';
@@ -793,7 +851,7 @@ async function loadPersonForEdit(personId) {
           '<span class="spouse-row__label">Vợ/Chồng ' + spouseRowCounter + ':</span>' +
           '<select class="spouse-select"><option value="">-- Chọn vợ/chồng --</option></select>' +
           '<button type="button" class="spouse-row__remove" onclick="removeSpouseRow(\'' + rowId + '\')" title="Xóa">×</button>';
-        container.appendChild(row);
+        spouseContainer.appendChild(row);
         populateSpouseSelect(row.querySelector('.spouse-select'));
         row.querySelector('.spouse-select').value = spouseId;
       });
@@ -801,15 +859,35 @@ async function loadPersonForEdit(personId) {
       addSpouseRow();
     }
     
+    // Load bố mẹ
+    const { data: parentLinks } = await window.sbClient
+      .from('parent_child')
+      .select('parent_id, parent_role')
+      .eq('child_id', personId);
+    
+    if (parentLinks && parentLinks.length > 0) {
+      parentLinks.forEach(link => {
+        if (link.parent_role === 'Bố') {
+          document.getElementById('fatherId').value = link.parent_id;
+        } else if (link.parent_role === 'Mẹ') {
+          document.getElementById('motherId').value = link.parent_id;
+        }
+      });
+    }
+    
     // Load bài viết liên kết
     tempLinkedNoteIds = person.linked_note_ids || [];
-    if (tempLinkedNoteIds.length > 0) await loadNotesCache();
+    if (tempLinkedNoteIds.length > 0) {
+      await loadNotesCache();
+    }
     renderLinkedNotes();
     
+    console.log('✅ Đã load xong toàn bộ thông tin');
+    
   } catch (err) {
-    console.error('Lỗi load person:', err);
+    console.error('❌ Lỗi load person:', err);
     alert('❌ Không load được dữ liệu: ' + err.message);
   }
 }
 
-console.log('📝 Form.js v1.3 loaded - Delete + Link Notes + Created By');
+console.log('📝 Form.js v1.4 loaded - Đã fix load dữ liệu + popup + Xóa');
