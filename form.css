@@ -1,8 +1,10 @@
 /* ============================================
-   FORM STYLES - GIA PHẢ NAM VIỆT (v2.2)
-   Fix: Bỏ !important ở display
+   FORM STYLES - GIA PHẢ NAM VIỆT (v2.3)
+   - 2 tầng: Xem + Sửa
+   - Màu nút: #5c40d9 (chính) + #2d5dac (phụ)
    ============================================ */
 
+/* ===== OVERLAY ===== */
 .form-modal {
   position: fixed !important;
   inset: 0 !important;
@@ -47,6 +49,7 @@
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* ===== HEADER ===== */
 .form-modal__header {
   display: flex;
   align-items: center;
@@ -81,13 +84,13 @@
   justify-content: center;
   transition: all 0.2s;
   line-height: 1;
-  pointer-events: auto;
 }
 
 .form-modal__close:hover {
   background: rgba(1, 40, 94, 0.1);
 }
 
+/* ===== BODY ===== */
 .form-modal__body {
   padding: 20px 22px;
   overflow-y: auto;
@@ -95,6 +98,150 @@
   background: #FAF8F0;
 }
 
+/* ============================================
+   TẦNG 1: XEM THÔNG TIN
+   ============================================ */
+.person-view {
+  text-align: center;
+  padding: 10px 0;
+}
+
+.person-view__avatar {
+  width: 140px;
+  height: 187px;
+  border-radius: 10px;
+  border: 2px solid #B8CCE8;
+  background: #FFFFFF;
+  overflow: hidden;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(1, 40, 94, 0.15);
+}
+
+.person-view__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.person-view__avatar-placeholder {
+  font-size: 48px;
+  color: #B8CCE8;
+}
+
+.person-view__name {
+  font-family: 'Noto Serif', serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: #01285E;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 8px 0 4px;
+  line-height: 1.3;
+}
+
+.person-view__years {
+  font-family: 'Noto Serif', serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: #01285E;
+  margin-bottom: 20px;
+}
+
+.person-view__section {
+  margin: 20px 0;
+  padding: 16px 0;
+  border-top: 1px dashed #B8CCE8;
+  text-align: left;
+}
+
+.person-view__section:first-of-type {
+  border-top: none;
+}
+
+.person-view__section-title {
+  font-family: 'Noto Serif', serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: #01285E;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  margin: 0 0 12px 0;
+  padding-left: 10px;
+  border-left: 4px solid #01285E;
+}
+
+.person-view__field {
+  margin-bottom: 12px;
+}
+
+.person-view__field-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #01285E;
+  margin-bottom: 4px;
+}
+
+.person-view__field-value {
+  font-family: 'Inter', sans-serif;
+  font-size: 15px;
+  font-style: italic;
+  color: #1A2E4A;
+  padding: 8px 12px;
+  background: #FFFFFF;
+  border: 1.5px solid #B8CCE8;
+  border-radius: 6px;
+  line-height: 1.6;
+  min-height: 38px;
+}
+
+.person-view__field-value--empty {
+  color: #99AACC;
+  font-style: italic;
+}
+
+.person-view__empty {
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-style: italic;
+  color: #99AACC;
+  padding: 12px;
+  text-align: center;
+  background: #FFFFFF;
+  border: 1px dashed #B8CCE8;
+  border-radius: 6px;
+}
+
+.person-view__children-note {
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-style: italic;
+  color: #1A2E4A;
+  padding: 14px;
+  background: #FFFFFF;
+  border: 1.5px solid #B8CCE8;
+  border-radius: 6px;
+  text-align: center;
+  line-height: 1.7;
+}
+
+/* ===== NÚT Ở TẦNG 1 ===== */
+.person-view__actions {
+  display: flex;
+  gap: 10px;
+  padding: 16px 0 8px;
+  border-top: 2px solid #B8CCE8;
+  margin-top: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* ============================================
+   TẦNG 2: SỬA THÔNG TIN
+   ============================================ */
 .form-section {
   margin-bottom: 22px;
   padding-bottom: 16px;
@@ -173,8 +320,8 @@
 
 .form-input:focus {
   outline: none;
-  border-color: #01285E;
-  box-shadow: 0 0 0 3px rgba(1, 40, 94, 0.15);
+  border-color: #5c40d9;
+  box-shadow: 0 0 0 3px rgba(92, 64, 217, 0.15);
 }
 
 .form-input::placeholder {
@@ -216,7 +363,7 @@ select.form-input {
 
 .form-hint-box {
   background: #E8F0FA;
-  border-left: 4px solid #01285E;
+  border-left: 4px solid #5c40d9;
   padding: 10px 14px;
   border-radius: 6px;
   margin-bottom: 12px;
@@ -228,8 +375,9 @@ select.form-input {
 
 .form-hint-box p { margin: 0 0 3px 0; }
 .form-hint-box p:last-child { margin-bottom: 0; }
-.form-hint-box strong { color: #01285E; font-style: normal; }
+.form-hint-box strong { color: #5c40d9; font-style: normal; }
 
+/* AVATAR UPLOAD */
 .avatar-upload {
   display: flex;
   gap: 16px;
@@ -267,6 +415,7 @@ select.form-input {
   gap: 6px;
 }
 
+/* CROP MODAL */
 .crop-modal__content {
   background: #FAF8F0;
   border-radius: 14px;
@@ -306,6 +455,9 @@ select.form-input {
   justify-content: center;
 }
 
+/* ============================================
+   BUTTONS — MÀU MỚI #5c40d9 + #2d5dac
+   ============================================ */
 .btn {
   padding: 9px 18px;
   border: none;
@@ -320,29 +472,31 @@ select.form-input {
   align-items: center;
   gap: 6px;
   justify-content: center;
-  pointer-events: auto;
 }
 
+/* Nút chính — XANH TÍM #5c40d9 */
 .btn--primary {
-  background: #01285E;
+  background: #5c40d9;
   color: #FFFFFF;
 }
 .btn--primary:hover {
-  background: #001a42;
+  background: #4a32c4;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(1, 40, 94, 0.3);
+  box-shadow: 0 4px 12px rgba(92, 64, 217, 0.3);
 }
 
+/* Nút phụ — XANH DƯƠNG #2d5dac */
 .btn--ghost {
-  background: transparent;
-  color: #01285E;
-  border: 1.5px solid #B8CCE8;
+  background: #2d5dac;
+  color: #FFFFFF;
+  border: none;
 }
 .btn--ghost:hover {
-  background: #E8F0FA;
-  border-color: #01285E;
+  background: #1e4080;
+  transform: translateY(-1px);
 }
 
+/* Nút Xóa — ĐỎ */
 .btn--danger {
   background: #C62828;
   color: #FFFFFF;
@@ -350,7 +504,6 @@ select.form-input {
 }
 .btn--danger:hover {
   background: #B71C1C;
-  border-color: #B71C1C;
 }
 
 .btn--small {
@@ -358,6 +511,19 @@ select.form-input {
   font-size: 12px;
 }
 
+/* Nút hành động chính (Đến phả hệ) — full width */
+.btn--block {
+  width: 100%;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ============================================
+   FORM ACTIONS / SPOUSE / CHILDREN
+   ============================================ */
 .form-actions-inline {
   display: flex;
   gap: 8px;
@@ -495,8 +661,8 @@ select.form-input {
 
 .contact-row input:focus {
   outline: none;
-  border-color: #01285E;
-  box-shadow: 0 0 0 2px rgba(1, 40, 94, 0.15);
+  border-color: #5c40d9;
+  box-shadow: 0 0 0 2px rgba(92, 64, 217, 0.15);
 }
 
 .contact-row__remove {
@@ -510,6 +676,7 @@ select.form-input {
 }
 .contact-row__remove:hover { background: #FFEBEE; }
 
+/* FOOTER */
 .form-modal__footer {
   display: flex;
   align-items: center;
@@ -531,6 +698,7 @@ select.form-input {
 
 .form-modal__footer .btn { min-width: 90px; }
 
+/* LINKED NOTES */
 .linked-notes-list {
   display: flex;
   flex-direction: column;
@@ -553,7 +721,7 @@ select.form-input {
 
 .linked-note-item:hover {
   background: #E8F0FA;
-  border-color: #01285E;
+  border-color: #5c40d9;
 }
 
 .linked-note-item__icon { font-size: 16px; }
@@ -600,16 +768,17 @@ select.form-input {
 
 .note-picker-item:hover {
   background: #E8F0FA;
-  border-color: #01285E;
+  border-color: #5c40d9;
 }
 
 .note-picker-item input[type="checkbox"] {
   width: 18px;
   height: 18px;
   cursor: pointer;
-  accent-color: #01285E;
+  accent-color: #5c40d9;
 }
 
+/* RESPONSIVE */
 @media (max-width: 600px) {
   .form-modal { padding: 8px !important; align-items: flex-start !important; }
   .form-modal__content { max-height: 96vh; border-radius: 10px; }
@@ -628,4 +797,66 @@ select.form-input {
   .form-section__title { font-size: 12px; }
   .form-label { font-size: 12px; }
   .form-input { font-size: 13px; padding: 8px 10px; }
+  .person-view__name { font-size: 22px; }
+  .person-view__years { font-size: 16px; }
+  .person-view__avatar { width: 120px; height: 160px; }
+}
+
+/* ============================================
+   FIX ẢNH ĐẠI DIỆN QUÁ TO TRONG FORM XEM
+   Dùng !important để ép kích thước ảnh nhỏ lại
+   ============================================ */
+
+.person-view > img,
+.person-view__avatar,
+.person-view__avatar-wrap,
+#personViewContent > img,
+#personViewContent > div > img:first-child {
+  max-width: 140px !important;
+  max-height: 187px !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: cover;
+  border-radius: 10px;
+  display: block;
+  margin: 0 auto 16px;
+  border: 2px solid #B8CCE8;
+  box-shadow: 0 4px 12px rgba(1, 40, 94, 0.15);
+}
+
+.person-view__avatar img,
+.person-view__avatar-wrap img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+  display: block;
+}
+
+.person-view__avatar,
+.person-view__avatar-wrap {
+  width: 140px !important;
+  height: 187px !important;
+  max-width: 140px !important;
+  max-height: 187px !important;
+  overflow: hidden;
+  margin: 0 auto 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #FFFFFF;
+}
+
+/* Mobile — nhỏ hơn */
+@media (max-width: 640px) {
+  .person-view > img,
+  #personViewContent > img,
+  .person-view__avatar,
+  .person-view__avatar-wrap {
+    max-width: 120px !important;
+    max-height: 160px !important;
+  }
+  .person-view__avatar {
+    width: 120px !important;
+    height: 160px !important;
+  }
 }
