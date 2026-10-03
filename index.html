@@ -108,7 +108,7 @@
     </div>
     <div class="card">
       <h2 class="card__title">GHI CHÚ &amp; NGHI VẤN CẦN KIỂM CHỨNG</h2>
-      <p class="empty-state">Chưa có ghi chú nào.</p>
+      <div id="notesList"><p class="empty-state">Chưa có ghi chú nào.</p></div>
     </div>
     <div class="card">
       <h2 class="card__title">TƯ LIỆU &amp; HÌNH ẢNH BỔ SUNG</h2>
@@ -250,12 +250,9 @@
           </div>
         </div>
         
-        <!-- VỢ/CHỒNG - Dynamic List -->
         <div class="form-group">
           <label class="form-label">💑 Nhận vợ/chồng</label>
-          <div class="spouse-rows" id="spouseRows">
-            <!-- Sẽ được thêm động -->
-          </div>
+          <div class="spouse-rows" id="spouseRows"></div>
           <button type="button" class="btn btn--ghost btn--small" onclick="addSpouseRow()" style="width: fit-content;">
             + Thêm vợ/chồng
           </button>
@@ -301,11 +298,36 @@
           <textarea class="form-input form-input--textarea" id="bio" placeholder="Nhập tiểu sử, thông tin bổ sung..." rows="5"></textarea>
         </div>
       </div>
+
+      <!-- BÀI VIẾT LIÊN QUAN Ở NGOẠI PHẢ -->
+      <div class="form-section">
+        <h3 class="form-section__title">BÀI VIẾT LIÊN QUAN Ở NGOẠI PHẢ</h3>
+        <p class="form-hint">Bấm đúp vào tiêu đề bài viết để chuyển tới bài viết đó ở tab Ngoại phả.</p>
+        <div id="linkedNotesList" class="linked-notes-list">
+          <p class="empty-hint">Chưa có bài viết liên kết.</p>
+        </div>
+        <button type="button" class="btn btn--ghost btn--small" onclick="openLinkNoteModal()">
+          + Liên kết bài viết
+        </button>
+      </div>
+
+      <!-- NGƯỜI ĐĂNG -->
+      <div class="form-section">
+        <h3 class="form-section__title">NGƯỜI ĐĂNG THÔNG TIN</h3>
+        <div class="form-row">
+          <div class="form-group form-group--full">
+            <label class="form-label">Tên người đăng</label>
+            <input type="text" class="form-input" id="createdByName" placeholder="Tự động lấy từ tài khoản. Có thể sửa nếu cần.">
+            <p class="form-hint">Hệ thống tự động điền tên từ tài khoản đang đăng nhập. Nếu admin sửa giúp người khác, có thể sửa tên tại đây.</p>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="form-modal__footer">
       <div class="form-modal__footer-left">
         <button type="button" class="btn btn--ghost" onclick="closePersonForm()">❌ Hủy</button>
+        <button type="button" class="btn btn--danger" id="deletePersonBtn" onclick="deletePerson()" style="display:none;">🗑️ Xóa</button>
       </div>
       <div class="form-modal__footer-right">
         <button type="button" class="btn btn--primary" onclick="savePerson()">💾 Lưu</button>
@@ -337,6 +359,30 @@
       </div>
       <div class="form-modal__footer-right">
         <button type="button" class="btn btn--primary" onclick="confirmCrop()">✂️ Cắt &amp; Lưu</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL LIÊN KẾT BÀI VIẾT -->
+<div class="form-modal form-modal--small" id="linkNoteModal" style="display:none">
+  <div class="form-modal__content">
+    <div class="form-modal__header">
+      <h2 class="form-modal__title">LIÊN KẾT BÀI VIẾT NGOẠI PHẢ</h2>
+      <button class="form-modal__close" onclick="closeLinkNoteModal()">×</button>
+    </div>
+    <div class="form-modal__body">
+      <p class="form-hint">Chọn bài viết muốn liên kết với người này.</p>
+      <div id="availableNotesList" class="notes-picker-list">
+        <p class="empty-hint">Chưa có bài viết nào ở Ngoại phả.</p>
+      </div>
+    </div>
+    <div class="form-modal__footer">
+      <div class="form-modal__footer-left">
+        <button type="button" class="btn btn--ghost" onclick="closeLinkNoteModal()">Hủy</button>
+      </div>
+      <div class="form-modal__footer-right">
+        <button type="button" class="btn btn--primary" onclick="confirmLinkNote()">💾 Lưu liên kết</button>
       </div>
     </div>
   </div>
@@ -389,7 +435,7 @@
   </div>
 </div>
 
-<!-- MODAL GÁN NHANH TÊN CON -->
+<!-- MODAL GÁN NHANH -->
 <div class="form-modal form-modal--small" id="quickAddModal" style="display:none">
   <div class="form-modal__content">
     <div class="form-modal__header">
@@ -400,8 +446,6 @@
       <div class="form-hint-box">
         <p><strong>Hướng dẫn:</strong> Mỗi dòng 1 người con.</p>
         <p><strong>Chỉ cần nhập HỌ TÊN.</strong> Hệ thống tự đoán giới tính.</p>
-        <p>Ví dụ:</p>
-        <p style="font-family: monospace; font-style: normal; padding-left: 12px;">Phạm Văn Hùng<br>Phạm Thị Ngọc Oanh<br>Phạm Văn Hải</p>
       </div>
       <div class="form-group">
         <label class="form-label">Danh sách con</label>
