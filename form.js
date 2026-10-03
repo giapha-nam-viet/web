@@ -1,851 +1,1170 @@
 /* ============================================
-   FORM STYLES - GIA PHẢ NAM VIỆT (v2.3)
+   FORM LOGIC - GIA PHẢ NAM VIỆT (v2.2 - PHẦN 1/2)
    - 2 tầng: Xem + Sửa
-   - Màu nút: #5c40d9 (chính) + #2d5dac (phụ)
+   - Nút "Đến Phả đồ"
    ============================================ */
 
-/* ===== OVERLAY ===== */
-.form-modal {
-  position: fixed !important;
-  inset: 0 !important;
-  background: rgba(1, 40, 94, 0.75) !important;
-  align-items: center !important;
-  justify-content: center !important;
-  z-index: 9999 !important;
-  padding: 20px !important;
-  overflow-y: auto !important;
-  margin: 0 !important;
+let currentEditingPersonId = null;
+let currentViewMode = 'view';
+let tempChildrenList = [];
+let tempAvatarData = null;
+let cropper = null;
+let tempLinkedNoteIds = [];1
+let allNotesCache = [];
+let tempOriginalPerson = null;
+
+/* ============================================
+   HÀM HIỆN / ẨN FORM
+   ============================================ */
+function showModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (modal) modal.classList.add('is-visible');
 }
 
-.form-modal.is-visible {
-  display: flex !important;
+function hideModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (modal) modal.classList.remove('is-visible');
 }
 
-.form-modal:not(.is-visible) {
-  display: none !important;
+function hideAllModals() {
+  document.querySelectorAll('.form-modal').forEach(m => m.classList.remove('is-visible'));
+  document.body.style.overflow = '';
 }
 
-.form-modal__content {
-  background: #FAF8F0;
-  border-radius: 14px;
-  width: 100%;
-  max-width: 720px;
-  max-height: 92vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 20px 60px rgba(1, 40, 94, 0.4);
-  border: 2px solid #B8CCE8;
-  animation: modalFadeIn 0.3s ease;
-  position: relative;
-  z-index: 10000;
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' || e.keyCode === 27) hideAllModals();
+});
+
+/* ============================================
+   1. MỞ / ĐÓNG FORM — 2 TẦNG
+   ============================================ */
+function openPersonForm(personId) {
+  currentEditingPersonId = personId || null;
+  tempChildrenList = [];
+  tempAvatarData = null;
+  tempLinkedNoteIds = [];
+  tempOriginalPerson = null;
+  
+  const title = document.getElementById('formTitle');
+  
+  if (personId) {
+    title.textContent = 'THÔNG TIN CÁ NHÂN';
+    currentViewMode = 'view';
+    showViewMode(personId);
+  } else {
+    title.textContent = 'THÊM CÁ NHÂN MỚI';
+    currentViewMode = 'edit';
+    resetForm();
+    showEditMode();
+    autoFillCreatedByName();
+  }
+  
+  populateRelationDropdowns();
+  renderSpouseRows();
+  renderTempChildren();
+  renderLinkedNotes();
+  
+  showModal('personFormModal');
+  document.body.style.overflow = 'hidden';
 }
 
-.form-modal--small .form-modal__content {
-  max-width: 520px;
-}
-
-@keyframes modalFadeIn {
-  from { opacity: 0; transform: translateY(20px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-/* ===== HEADER ===== */
-.form-modal__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 22px;
-  background: #D4E0F0;
-  border-bottom: 2px solid #B8CCE8;
-  border-radius: 12px 12px 0 0;
-}
-
-.form-modal__title {
-  font-family: 'Noto Serif', serif;
-  font-size: 18px;
-  font-weight: 700;
-  color: #01285E;
-  margin: 0;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-}
-
-.form-modal__close {
-  background: transparent;
-  border: none;
-  font-size: 26px;
-  color: #01285E;
-  cursor: pointer;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-  line-height: 1;
-}
-
-.form-modal__close:hover {
-  background: rgba(1, 40, 94, 0.1);
-}
-
-/* ===== BODY ===== */
-.form-modal__body {
-  padding: 20px 22px;
-  overflow-y: auto;
-  flex: 1;
-  background: #FAF8F0;
+function closePersonForm() {
+  const msg = currentViewMode === 'edit' 
+    ? 'Bạn có chắc muốn hủy? Mọi thay đổi chưa lưu sẽ mất.'
+    : 'Đóng hồ sơ này?';
+  if (!confirm(msg)) return;
+  
+  hideModal('personFormModal');
+  document.body.style.overflow = '';
+  currentEditingPersonId = null;
+  tempChildrenList = [];
+  tempAvatarData = null;
+  tempLinkedNoteIds = [];
+  tempOriginalPerson = null;
+  currentViewMode = 'view';
 }
 
 /* ============================================
-   TẦNG 1: XEM THÔNG TIN
+   2. TẦNG 1: XEM THÔNG TIN
    ============================================ */
-.person-view {
-  text-align: center;
-  padding: 10px 0;
-}
-
-.person-view__avatar {
-  width: 140px;
-  height: 187px;
-  border-radius: 10px;
-  border: 2px solid #B8CCE8;
-  background: #FFFFFF;
-  overflow: hidden;
-  margin: 0 auto 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 12px rgba(1, 40, 94, 0.15);
-}
-
-.person-view__avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.person-view__avatar-placeholder {
-  font-size: 48px;
-  color: #B8CCE8;
-}
-
-.person-view__name {
-  font-family: 'Noto Serif', serif;
-  font-size: 26px;
-  font-weight: 700;
-  color: #01285E;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  margin: 8px 0 4px;
-  line-height: 1.3;
-}
-
-.person-view__years {
-  font-family: 'Noto Serif', serif;
-  font-size: 18px;
-  font-weight: 700;
-  color: #01285E;
-  margin-bottom: 20px;
-}
-
-.person-view__section {
-  margin: 20px 0;
-  padding: 16px 0;
-  border-top: 1px dashed #B8CCE8;
-  text-align: left;
-}
-
-.person-view__section:first-of-type {
-  border-top: none;
-}
-
-.person-view__section-title {
-  font-family: 'Noto Serif', serif;
-  font-size: 14px;
-  font-weight: 700;
-  color: #01285E;
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
-  margin: 0 0 12px 0;
-  padding-left: 10px;
-  border-left: 4px solid #01285E;
-}
-
-.person-view__field {
-  margin-bottom: 12px;
-}
-
-.person-view__field-label {
-  font-family: 'Inter', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  color: #01285E;
-  margin-bottom: 4px;
-}
-
-.person-view__field-value {
-  font-family: 'Inter', sans-serif;
-  font-size: 15px;
-  font-style: italic;
-  color: #1A2E4A;
-  padding: 8px 12px;
-  background: #FFFFFF;
-  border: 1.5px solid #B8CCE8;
-  border-radius: 6px;
-  line-height: 1.6;
-  min-height: 38px;
-}
-
-.person-view__field-value--empty {
-  color: #99AACC;
-  font-style: italic;
-}
-
-.person-view__empty {
-  font-family: 'Inter', sans-serif;
-  font-size: 14px;
-  font-style: italic;
-  color: #99AACC;
-  padding: 12px;
-  text-align: center;
-  background: #FFFFFF;
-  border: 1px dashed #B8CCE8;
-  border-radius: 6px;
-}
-
-.person-view__children-note {
-  font-family: 'Inter', sans-serif;
-  font-size: 14px;
-  font-style: italic;
-  color: #1A2E4A;
-  padding: 14px;
-  background: #FFFFFF;
-  border: 1.5px solid #B8CCE8;
-  border-radius: 6px;
-  text-align: center;
-  line-height: 1.7;
-}
-
-/* ===== NÚT Ở TẦNG 1 ===== */
-.person-view__actions {
-  display: flex;
-  gap: 10px;
-  padding: 16px 0 8px;
-  border-top: 2px solid #B8CCE8;
-  margin-top: 20px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-/* ============================================
-   TẦNG 2: SỬA THÔNG TIN
-   ============================================ */
-.form-section {
-  margin-bottom: 22px;
-  padding-bottom: 16px;
-  border-bottom: 1px dashed #B8CCE8;
-}
-
-.form-section:last-child {
-  border-bottom: none;
-  margin-bottom: 0;
-  padding-bottom: 0;
-}
-
-.form-section__title {
-  font-family: 'Noto Serif', serif;
-  font-size: 14px;
-  font-weight: 700;
-  color: #01285E;
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
-  margin: 0 0 14px 0;
-  padding-left: 10px;
-  border-left: 4px solid #01285E;
-  line-height: 1.4;
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-@media (max-width: 600px) {
-  .form-row { grid-template-columns: 1fr; gap: 10px; }
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.form-group--full {
-  grid-column: 1 / -1;
-}
-
-.form-label {
-  font-family: 'Inter', 'Be Vietnam Pro', sans-serif;
-  font-style: normal;
-  font-weight: 600;
-  font-size: 13px;
-  color: #01285E;
-  margin-bottom: 3px;
-  line-height: 1.4;
-}
-
-.required {
-  color: #C62828;
-  font-weight: 700;
-}
-
-.form-input {
-  width: 100%;
-  padding: 9px 12px;
-  border: 1.5px solid #B8CCE8;
-  border-radius: 6px;
-  font-family: 'Inter', 'Be Vietnam Pro', sans-serif;
-  font-style: italic;
-  font-size: 14px;
-  color: #1A2E4A;
-  background: #FFFFFF;
-  transition: all 0.2s;
-  box-sizing: border-box;
-  line-height: 1.6;
-}
-
-.form-input:focus {
-  outline: none;
-  border-color: #5c40d9;
-  box-shadow: 0 0 0 3px rgba(92, 64, 217, 0.15);
-}
-
-.form-input::placeholder {
-  color: #99AACC;
-  font-style: italic;
-}
-
-.form-input--textarea {
-  resize: vertical;
-  min-height: 70px;
-  line-height: 1.7;
-}
-
-.form-input--mono {
-  font-family: 'Courier New', monospace;
-  font-style: normal;
-  font-size: 13px;
-  line-height: 1.7;
-}
-
-select.form-input {
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2301285E' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 16px;
-  padding-right: 34px;
-  font-style: normal;
-}
-
-.form-hint {
-  font-size: 11px;
-  color: #99AACC;
-  font-style: italic;
-  margin: 2px 0 0 0;
-  line-height: 1.4;
-}
-
-.form-hint-box {
-  background: #E8F0FA;
-  border-left: 4px solid #5c40d9;
-  padding: 10px 14px;
-  border-radius: 6px;
-  margin-bottom: 12px;
-  font-size: 12px;
-  color: #1A2E4A;
-  line-height: 1.6;
-  font-style: italic;
-}
-
-.form-hint-box p { margin: 0 0 3px 0; }
-.form-hint-box p:last-child { margin-bottom: 0; }
-.form-hint-box strong { color: #5c40d9; font-style: normal; }
-
-/* AVATAR UPLOAD */
-.avatar-upload {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
-}
-
-.avatar-preview {
-  width: 110px;
-  height: 147px;
-  border-radius: 8px;
-  border: 2px dashed #B8CCE8;
-  background: #FFFFFF;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-.avatar-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.avatar-preview__placeholder {
-  font-size: 32px;
-  color: #B8CCE8;
-}
-
-.avatar-actions {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* CROP MODAL */
-.crop-modal__content {
-  background: #FAF8F0;
-  border-radius: 14px;
-  width: 100%;
-  max-width: 700px;
-  max-height: 92vh;
-  display: flex;
-  flex-direction: column;
-  border: 2px solid #B8CCE8;
-}
-
-.crop-modal__image-container {
-  flex: 1;
-  overflow: hidden;
-  background: #0A1F3D;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  min-height: 300px;
-}
-
-.crop-modal__image-container img {
-  max-width: 100%;
-  max-height: 500px;
-  display: block;
-}
-
-.crop-modal__tools {
-  display: flex;
-  gap: 8px;
-  padding: 12px 20px;
-  background: #D4E0F0;
-  border-top: 1px solid #B8CCE8;
-  border-bottom: 1px solid #B8CCE8;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-/* ============================================
-   BUTTONS — MÀU MỚI #5c40d9 + #2d5dac
-   ============================================ */
-.btn {
-  padding: 9px 18px;
-  border: none;
-  border-radius: 6px;
-  font-family: 'Inter', 'Be Vietnam Pro', sans-serif;
-  font-style: normal;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  justify-content: center;
-}
-
-/* Nút chính — XANH TÍM #5c40d9 */
-.btn--primary {
-  background: #5c40d9;
-  color: #FFFFFF;
-}
-.btn--primary:hover {
-  background: #4a32c4;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(92, 64, 217, 0.3);
-}
-
-/* Nút phụ — XANH DƯƠNG #2d5dac */
-.btn--ghost {
-  background: #2d5dac;
-  color: #FFFFFF;
-  border: none;
-}
-.btn--ghost:hover {
-  background: #1e4080;
-  transform: translateY(-1px);
-}
-
-/* Nút Xóa — ĐỎ */
-.btn--danger {
-  background: #C62828;
-  color: #FFFFFF;
-  border: 1.5px solid #C62828;
-}
-.btn--danger:hover {
-  background: #B71C1C;
-}
-
-.btn--small {
-  padding: 6px 12px;
-  font-size: 12px;
-}
-
-/* Nút hành động chính (Đến phả hệ) — full width */
-.btn--block {
-  width: 100%;
-  padding: 12px 20px;
-  font-size: 14px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-/* ============================================
-   FORM ACTIONS / SPOUSE / CHILDREN
-   ============================================ */
-.form-actions-inline {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-
-.spouse-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.spouse-row {
-  display: grid;
-  grid-template-columns: 100px 1fr auto;
-  gap: 8px;
-  align-items: center;
-}
-
-.spouse-row__label {
-  font-family: 'Inter', sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-  color: #01285E;
-  font-style: normal;
-}
-
-.spouse-row select {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1.5px solid #B8CCE8;
-  border-radius: 6px;
-  font-family: 'Inter', sans-serif;
-  font-size: 13px;
-  color: #1A2E4A;
-  background: #FFFFFF;
-}
-
-.spouse-row__remove {
-  background: transparent;
-  border: none;
-  font-size: 18px;
-  color: #C62828;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 5px;
-}
-.spouse-row__remove:hover { background: #FFEBEE; }
-
-.children-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.child-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px 12px;
-  background: #FFFFFF;
-  border: 1px solid #B8CCE8;
-  border-radius: 6px;
-  font-size: 13px;
-}
-
-.child-item__info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.child-item__name {
-  font-family: 'Inter', sans-serif;
-  font-weight: 600;
-  color: #01285E;
-  font-style: normal;
-}
-.child-item__meta { font-size: 11px; color: #99AACC; font-style: italic; }
-.child-item__type {
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 8px;
-  background: #E8F0FA;
-  color: #01285E;
-  font-weight: 600;
-  white-space: nowrap;
-  font-style: normal;
-}
-.child-item__actions { display: flex; gap: 4px; }
-.child-item__btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 3px 6px;
-  border-radius: 5px;
-}
-.child-item__btn:hover { background: #E8F0FA; }
-
-.empty-hint {
-  text-align: center;
-  color: #99AACC;
-  font-style: italic;
-  font-size: 12px;
-  padding: 16px;
-  margin: 0;
-  background: #FFFFFF;
-  border-radius: 6px;
-  border: 1px dashed #B8CCE8;
-}
-
-.contact-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.contact-row {
-  display: grid;
-  grid-template-columns: 1fr 2fr auto;
-  gap: 6px;
-  align-items: center;
-}
-
-.contact-row input {
-  padding: 7px 10px;
-  border: 1.5px solid #B8CCE8;
-  border-radius: 5px;
-  font-size: 13px;
-  font-family: 'Inter', sans-serif;
-  font-style: italic;
-  color: #1A2E4A;
-  background: #FFFFFF;
-}
-
-.contact-row input:focus {
-  outline: none;
-  border-color: #5c40d9;
-  box-shadow: 0 0 0 2px rgba(92, 64, 217, 0.15);
-}
-
-.contact-row__remove {
-  background: transparent;
-  border: none;
-  font-size: 16px;
-  color: #C62828;
-  cursor: pointer;
-  padding: 3px 6px;
-  border-radius: 5px;
-}
-.contact-row__remove:hover { background: #FFEBEE; }
-
-/* FOOTER */
-.form-modal__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 12px 22px;
-  border-top: 2px solid #B8CCE8;
-  background: #E8F0FA;
-  border-radius: 0 0 12px 12px;
-  flex-wrap: wrap;
-}
-
-.form-modal__footer-left,
-.form-modal__footer-right {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.form-modal__footer .btn { min-width: 90px; }
-
-/* LINKED NOTES */
-.linked-notes-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-
-.linked-note-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: #FFFFFF;
-  border: 1px solid #B8CCE8;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-size: 13px;
-}
-
-.linked-note-item:hover {
-  background: #E8F0FA;
-  border-color: #5c40d9;
-}
-
-.linked-note-item__icon { font-size: 16px; }
-
-.linked-note-item__title {
-  flex: 1;
-  font-family: 'Inter', sans-serif;
-  color: #1A2E4A;
-  font-weight: 500;
-}
-
-.linked-note-item__remove {
-  background: transparent;
-  border: none;
-  font-size: 16px;
-  color: #C62828;
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-.linked-note-item__remove:hover { background: #FFEBEE; }
-
-.notes-picker-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.note-picker-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: #FFFFFF;
-  border: 1px solid #B8CCE8;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-size: 13px;
-  color: #1A2E4A;
-}
-
-.note-picker-item:hover {
-  background: #E8F0FA;
-  border-color: #5c40d9;
-}
-
-.note-picker-item input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-  accent-color: #5c40d9;
-}
-
-/* RESPONSIVE */
-@media (max-width: 600px) {
-  .form-modal { padding: 8px !important; align-items: flex-start !important; }
-  .form-modal__content { max-height: 96vh; border-radius: 10px; }
-  .form-modal__header { padding: 12px 16px; }
-  .form-modal__title { font-size: 15px; }
-  .form-modal__body { padding: 14px 16px; }
-  .form-modal__footer { padding: 10px 16px; flex-direction: column; gap: 8px; }
-  .form-modal__footer-left, .form-modal__footer-right { width: 100%; }
-  .form-modal__footer .btn { flex: 1; }
-  .avatar-upload { flex-direction: column; align-items: center; }
-  .avatar-preview { width: 90px; height: 120px; }
-  .contact-row { grid-template-columns: 1fr; gap: 4px; }
-  .contact-row__remove { justify-self: end; }
-  .spouse-row { grid-template-columns: 1fr; gap: 4px; }
-  .spouse-row__remove { justify-self: end; }
-  .form-section__title { font-size: 12px; }
-  .form-label { font-size: 12px; }
-  .form-input { font-size: 13px; padding: 8px 10px; }
-  .person-view__name { font-size: 22px; }
-  .person-view__years { font-size: 16px; }
-  .person-view__avatar { width: 120px; height: 160px; }
-}
-
-/* ============================================
-   FIX ẢNH ĐẠI DIỆN QUÁ TO TRONG TAB XEM
-   Giới hạn kích thước ảnh, giữ tỷ lệ 3:4
-   ============================================ */
-
-/* Ảnh trong tab Xem (person-view) */
-.person-view img,
-.person-view__avatar,
-.person-view__photo,
-#personViewContent img {
-  max-width: 240px;
-  max-height: 320px;
-  width: auto;
-  height: auto;
-  object-fit: cover;
-  border-radius: 10px;
-  display: block;
-  margin: 0 auto 16px;
-  box-shadow: 0 4px 12px rgba(1, 40, 94, 0.15);
-}
-
-/* Container ảnh trong form (nếu có wrapper) */
-.person-view__avatar-wrap,
-.person-view__photo-wrap {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 16px 0;
-  margin-bottom: 12px;
-}
-
-/* Mobile — nhỏ hơn */
-@media (max-width: 640px) {
-  .person-view img,
-  .person-view__avatar,
-  .person-view__photo,
-  #personViewContent img {
-    max-width: 180px;
-    max-height: 240px;
+async function showViewMode(personId) {
+  currentViewMode = 'view';
+  
+  document.getElementById('personViewBody').style.display = 'block';
+  document.getElementById('personEditBody').style.display = 'none';
+  document.getElementById('formTitle').textContent = 'THÔNG TIN CÁ NHÂN';
+  
+  renderViewFooter();
+  
+  if (!window.sbClient) {
+    document.getElementById('personViewContent').innerHTML = '<p class="person-view__empty">Chưa kết nối được database.</p>';
+    return;
+  }
+  
+  try {
+    const { data: person, error } = await window.sbClient
+      .from('persons').select('*').eq('id', personId).single();
+    if (error) throw error;
+    if (!person) throw new Error('Không tìm thấy người này');
+    
+    tempOriginalPerson = person;
+    
+    const { data: marriages } = await window.sbClient
+      .from('marriages').select('*')
+      .or('husband_id.eq.' + personId + ',wife_id.eq.' + personId);
+    
+    const spouseNames = [];
+    if (marriages && marriages.length > 0) {
+      for (const m of marriages) {
+        const sId = m.husband_id === personId ? m.wife_id : m.husband_id;
+        const { data: spouse } = await window.sbClient
+          .from('persons').select('full_name, generation').eq('id', sId).maybeSingle();
+        if (spouse) spouseNames.push(spouse.full_name + ' (Đời ' + spouse.generation + ')');
+      }
+    }
+    
+    const { data: parents } = await window.sbClient
+      .from('parent_child').select('parent_id, parent_role').eq('child_id', personId);
+    
+    let fatherName = '', motherName = '';
+    if (parents && parents.length > 0) {
+      for (const p of parents) {
+        const { data: par } = await window.sbClient
+          .from('persons').select('full_name, generation').eq('id', p.parent_id).maybeSingle();
+        if (par) {
+          if (p.parent_role === 'Bố') fatherName = par.full_name + ' (Đời ' + par.generation + ')';
+          else if (p.parent_role === 'Mẹ') motherName = par.full_name + ' (Đời ' + par.generation + ')';
+        }
+      }
+    }
+    
+    renderPersonView(person, spouseNames, fatherName, motherName);
+    
+  } catch (err) {
+    console.error('Lỗi load view:', err);
+    document.getElementById('personViewContent').innerHTML = 
+      '<p class="person-view__empty">❌ Không tải được thông tin: ' + err.message + '</p>';
   }
 }
 
-/* Đảm bảo modal có thể cuộn nếu nội dung dài */
-.form-modal__body {
-  overflow-y: auto;
-  max-height: calc(100vh - 200px);
+function renderPersonView(person, spouseNames, fatherName, motherName) {
+  const container = document.getElementById('personViewContent');
+  
+  const yearsParts = [];
+  if (person.birth_year) yearsParts.push(person.birth_year);
+  if (person.death_year) yearsParts.push(person.death_year);
+  const yearsStr = yearsParts.length === 2 
+    ? yearsParts[0] + ' - ' + yearsParts[1]
+    : (yearsParts[0] ? yearsParts[0] : '');
+  
+  let avatarHtml;
+  if (person.avatar_url) {
+    avatarHtml = '<img src="' + person.avatar_url + '" alt="Avatar">';
+  } else {
+    avatarHtml = '<span class="person-view__avatar-placeholder">📷</span>';
+  }
+  
+  function field(label, value) {
+    const val = value ? String(value) : '';
+    const isEmpty = !val || val === 'null' || val === 'undefined';
+    return '<div class="person-view__field">' +
+      '<div class="person-view__field-label">' + label + '</div>' +
+      '<div class="person-view__field-value' + (isEmpty ? ' person-view__field-value--empty' : '') + '">' +
+        (isEmpty ? '(chưa có thông tin)' : val) +
+      '</div>' +
+    '</div>';
+  }
+  
+  const html = 
+    '<div class="person-view__avatar">' + avatarHtml + '</div>' +
+    '<div class="person-view__name">' + (person.full_name || '(chưa có tên)') + '</div>' +
+    (yearsStr ? '<div class="person-view__years">' + yearsStr + '</div>' : '') +
+    
+    '<div class="person-view__section">' +
+      '<div class="person-view__section-title">THÔNG TIN CƠ BẢN</div>' +
+      field('Vai trò', person.role_type || person.role) +
+      field('Giới tính', person.gender) +
+      field('Đời thứ', person.generation ? 'Đời ' + person.generation : '') +
+      field('Chi nhánh', person.branch) +
+      field('Thứ tự sinh', person.sibling_order) +
+      field('Nơi sinh', person.birth_place) +
+      field('Hoàn cảnh đặc biệt', person.special_status && person.special_status !== 'Bình thường' ? person.special_status : '') +
+    '</div>' +
+    
+    '<div class="person-view__section">' +
+      '<div class="person-view__section-title">QUAN HỆ GIA ĐÌNH</div>' +
+      field('Bố', fatherName) +
+      field('Mẹ', motherName) +
+      field('Vợ/Chồng', spouseNames.length > 0 ? spouseNames.join(', ') : '') +
+    '</div>' +
+    
+    '<div class="person-view__section">' +
+      '<div class="person-view__section-title">CON CÁI</div>' +
+      '<div class="person-view__children-note">' +
+        'danh sách tên con cái tự động cập khi có khai báo nhận cha mẹ ở đời sau' +
+      '</div>' +
+    '</div>' +
+    
+    (person.occupation ? 
+      '<div class="person-view__section">' +
+        '<div class="person-view__section-title">THÔNG TIN CÁ NHÂN</div>' +
+        field('Nghề nghiệp / Chuyên môn', person.occupation) +
+      '</div>' : '') +
+    
+    (person.bio ? 
+      '<div class="person-view__section">' +
+        '<div class="person-view__section-title">TIỂU SỬ</div>' +
+        '<div class="person-view__field">' +
+          '<div class="person-view__field-value" style="font-style: italic;">' + person.bio + '</div>' +
+        '</div>' +
+      '</div>' : '') +
+    
+    '<div class="person-view__section">' +
+      '<div class="person-view__section-title">BÀI VIẾT LIÊN QUAN Ở NGOẠI PHẢ</div>' +
+      '<div class="person-view__children-note">Bấm nút "Sửa" để thêm liên kết bài viết.</div>' +
+    '</div>' +
+    
+    (person.created_by_name ? 
+      '<div class="person-view__section">' +
+        '<div class="person-view__section-title">NGƯỜI ĐĂNG THÔNG TIN</div>' +
+        field('Tên người đăng', person.created_by_name) +
+      '</div>' : '');
+  
+  container.innerHTML = html;
 }
+
+function renderViewFooter() {
+  const footer = document.getElementById('personFormFooter');
+  const deleteBtn = currentEditingPersonId
+    ? '<button type="button" class="btn btn--danger" onclick="deletePerson()">🗑️ XÓA</button>'
+    : '';
+  
+  footer.innerHTML = 
+    '<div class="form-modal__footer-left">' +
+      '<button type="button" class="btn btn--ghost" onclick="closePersonForm()">TRỞ VỀ</button>' +
+      deleteBtn +
+    '</div>' +
+    '<div class="form-modal__footer-right">' +
+      '<button type="button" class="btn btn--ghost" onclick="goToPhaDo()">ĐẾN PHẢ ĐỒ</button>' +
+      '<button type="button" class="btn btn--primary" onclick="switchToEditMode()">✏️ SỬA</button>' +
+    '</div>';
+}
+
+function switchToEditMode() {
+  if (!currentEditingPersonId) return;
+  currentViewMode = 'edit';
+  
+  document.getElementById('personViewBody').style.display = 'none';
+  document.getElementById('personEditBody').style.display = 'block';
+  document.getElementById('formTitle').textContent = 'SỬA THÔNG TIN CÁ NHÂN';
+  
+  renderEditFooter();
+  loadPersonForEdit(currentEditingPersonId);
+}
+
+/* ============================================
+   3. TẦNG 2: SỬA THÔNG TIN
+   ============================================ */
+function showEditMode() {
+  document.getElementById('personViewBody').style.display = 'none';
+  document.getElementById('personEditBody').style.display = 'block';
+  renderEditFooter();
+}
+
+function renderEditFooter() {
+  const footer = document.getElementById('personFormFooter');
+  
+  footer.innerHTML = 
+    '<div class="form-modal__footer-left">' +
+      '<button type="button" class="btn btn--ghost" onclick="cancelEdit()">❌ HỦY</button>' +
+    '</div>' +
+    '<div class="form-modal__footer-right">' +
+      '<button type="button" class="btn btn--primary" onclick="savePerson()">💾 LƯU</button>' +
+    '</div>';
+}
+
+/* ============================================
+   4. NÚT "ĐẾN PHẢ ĐỒ"
+   ============================================ */
+function goToPhaDo() {
+  const tab = document.querySelector('.tab[data-tab="pha-do"]');
+  if (tab) tab.click();
+  
+  hideModal('personFormModal');
+  document.body.style.overflow = '';
+  currentEditingPersonId = null;
+  currentViewMode = 'view';
+  
+  setTimeout(() => {
+    alert('📊 PHẢ ĐỒ ĐANG ĐƯỢC XÂY DỰNG\n\nSẽ hiển thị cây gia phả dạng đồ thị với các đường nối cha-con.\n\nVui lòng quay lại sau!');
+  }, 300);
+}
+
+/* ============================================
+   5. RESET FORM
+   ============================================ */
+function resetForm() {
+  const ids = ['fullName', 'gender', 'branch', 'siblingOrder', 'birthYear', 
+               'deathYear', 'birthPlace', 'specialStatus', 'occupation', 
+               'conflictNote', 'bio', 'fatherId', 'motherId', 
+               'roleType', 'generation', 'createdByName'];
+  
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      if (el.tagName === 'SELECT') el.selectedIndex = 0;
+      else el.value = '';
+    }
+  });
+  
+  const av = document.getElementById('avatarPreview');
+  if (av) av.innerHTML = '<span class="avatar-preview__placeholder">📷</span>';
+  
+  const cl = document.getElementById('contactList');
+  if (cl) cl.innerHTML = '';
+  
+  const sr = document.getElementById('spouseRows');
+  if (sr) sr.innerHTML = '';
+  
+  renderTempChildren();
+  renderLinkedNotes();
+}
+
+async function autoFillCreatedByName() {
+  if (!window.currentUser || !window.sbClient) return;
+  try {
+    const { data: profile } = await window.sbClient
+      .from('profiles').select('display_name')
+      .eq('id', window.currentUser.id).maybeSingle();
+    
+    const nameInput = document.getElementById('createdByName');
+    if (nameInput && profile && profile.display_name) {
+      nameInput.value = profile.display_name;
+    } else if (nameInput && window.currentUser.email) {
+      nameInput.value = window.currentUser.email;
+    }
+  } catch (err) { console.error(err); }
+}
+
+/* ============================================
+   6. CROP ẢNH
+   ============================================ */
+function openCropModal(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  if (!file.type.startsWith('image/')) {
+    alert('⚠️ Vui lòng chọn file ảnh');
+    return;
+  }
+  
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = document.getElementById('cropImage');
+    if (!img) return;
+    img.src = e.target.result;
+    showModal('cropModal');
+    
+    img.onload = () => {
+      if (cropper) cropper.destroy();
+      if (typeof Cropper !== 'undefined') {
+        cropper = new Cropper(img, {
+          aspectRatio: 3/4, viewMode: 1, autoCropArea: 0.85,
+          responsive: true, background: false, dragMode: 'move'
+        });
+      }
+    };
+  };
+  reader.readAsDataURL(file);
+}
+
+function closeCropModal() { hideModal('cropModal'); }
+function rotateCropImage(d) { if (cropper) cropper.rotate(d); }
+function flipCropImage(dir) { if (cropper) dir === 'h' ? cropper.scaleX(-1) : cropper.scaleY(-1); }
+function resetCropImage() { if (cropper) cropper.reset(); }
+
+function confirmCrop() {
+  if (!cropper) return;
+  const canvas = cropper.getCroppedCanvas({ width: 600, height: 800 });
+  canvas.toBlob((blob) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      tempAvatarData = reader.result;
+      const av = document.getElementById('avatarPreview');
+      if (av) av.innerHTML = '<img src="' + tempAvatarData + '" alt="Avatar">';
+      closeCropModal();
+    };
+    reader.readAsDataURL(blob);
+  }, 'image/webp', 0.85);
+}
+
+/* ============================================
+   7. POPULATE DROPDOWNS
+   ============================================ */
+function populateRelationDropdowns() {
+  const persons = window.allPersons || [];
+  const f = document.getElementById('fatherId');
+  const m = document.getElementById('motherId');
+  if (!f || !m) return;
+  
+  f.innerHTML = '<option value="">-- Chọn bố --</option>' +
+    persons.filter(p => p.gender === 'Nam' && p.id !== currentEditingPersonId && !p.is_deleted)
+      .map(p => '<option value="' + p.id + '">' + p.full_name + ' (Đời ' + p.generation + ')</option>').join('');
+  
+  m.innerHTML = '<option value="">-- Chọn mẹ --</option>' +
+    persons.filter(p => p.gender === 'Nữ' && p.id !== currentEditingPersonId && !p.is_deleted)
+      .map(p => '<option value="' + p.id + '">' + p.full_name + ' (Đời ' + p.generation + ')</option>').join('');
+}
+
+/* ============================================
+   8. VỢ/CHỒNG
+   ============================================ */
+let spouseRowCounter = 0;
+
+function addSpouseRow() {
+  spouseRowCounter++;
+  const container = document.getElementById('spouseRows');
+  if (!container) return;
+  const rowId = 'spouse_row_' + spouseRowCounter;
+  
+  const row = document.createElement('div');
+  row.className = 'spouse-row';
+  row.id = rowId;
+  row.innerHTML = 
+    '<span class="spouse-row__label">Vợ/Chồng ' + spouseRowCounter + ':</span>' +
+    '<select class="spouse-select"><option value="">-- Chọn vợ/chồng --</option></select>' +
+    '<button type="button" class="spouse-row__remove" onclick="removeSpouseRow(\'' + rowId + '\')">×</button>';
+  
+  container.appendChild(row);
+  populateSpouseSelect(row.querySelector('.spouse-select'));
+}
+
+function removeSpouseRow(rowId) {
+  const row = document.getElementById(rowId);
+  if (row) row.remove();
+  document.querySelectorAll('#spouseRows .spouse-row').forEach((r, idx) => {
+    r.querySelector('.spouse-row__label').textContent = 'Vợ/Chồng ' + (idx + 1) + ':';
+  });
+}
+
+function populateSpouseSelect(select) {
+  const persons = window.allPersons || [];
+  select.innerHTML = '<option value="">-- Chọn vợ/chồng --</option>' +
+    persons.filter(p => p.id !== currentEditingPersonId && !p.is_deleted)
+      .map(p => '<option value="' + p.id + '">' + p.full_name + ' (Đời ' + p.generation + ')</option>').join('');
+}
+
+function renderSpouseRows() {
+  const c = document.getElementById('spouseRows');
+  if (!c) return;
+  c.innerHTML = '';
+  spouseRowCounter = 0;
+  addSpouseRow();
+}
+
+function getSpouseRowsData() {
+  const rows = document.querySelectorAll('#spouseRows .spouse-row');
+  const result = [];
+  rows.forEach((row, idx) => {
+    const sel = row.querySelector('.spouse-select');
+    if (sel && sel.value) result.push({ personId: sel.value, order: idx + 1 });
+  });
+  return result;
+}
+
+/* ============================================
+   9. THÊM CON
+   ============================================ */
+function openAddChildModal() {
+  showModal('addChildModal');
+  ['childName', 'childBirthYear', 'childOrder'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+}
+
+function closeAddChildModal() { hideModal('addChildModal'); }
+
+function confirmAddChild() {
+  const name = document.getElementById('childName').value.trim();
+  if (!name) { alert('⚠️ Vui lòng nhập họ tên con'); return; }
+  
+  tempChildrenList.push({
+    temp_id: 'temp_' + Date.now(),
+    full_name: name,
+    gender: document.getElementById('childGender').value,
+    birth_year: parseInt(document.getElementById('childBirthYear').value) || null,
+    sibling_order: parseInt(document.getElementById('childOrder').value) || null,
+    child_type: document.getElementById('childType').value
+  });
+  
+  renderTempChildren();
+  closeAddChildModal();
+}
+
+function renderTempChildren() {
+  const list = document.getElementById('childrenList');
+  if (!list) return;
+  
+  if (tempChildrenList.length === 0) {
+    list.innerHTML = '<p class="empty-hint">Chưa có con nào. Bấm "+ Thêm con" để thêm.</p>';
+    return;
+  }
+  
+  list.innerHTML = tempChildrenList.map((child, idx) => 
+    '<div class="child-item">' +
+      '<div class="child-item__info">' +
+        '<div class="child-item__name">' + (idx + 1) + '. ' + child.full_name + '</div>' +
+        '<div class="child-item__meta">' + child.gender + (child.birth_year ? ' • ' + child.birth_year : '') + '</div>' +
+      '</div>' +
+      '<div class="child-item__type">' + child.child_type + '</div>' +
+      '<div class="child-item__actions">' +
+        '<button type="button" class="child-item__btn" onclick="removeTempChild(\'' + child.temp_id + '\')">🗑️</button>' +
+      '</div>' +
+    '</div>'
+  ).join('');
+}
+
+function removeTempChild(tempId) {
+  if (!confirm('Xóa con này?')) return;
+  tempChildrenList = tempChildrenList.filter(c => c.temp_id !== tempId);
+  renderTempChildren();
+}
+
+/* ============================================
+   10. GÁN NHANH
+   ============================================ */
+function openQuickAddModal() {
+  showModal('quickAddModal');
+  const t = document.getElementById('quickAddText');
+  if (t) t.value = '';
+}
+
+function closeQuickAddModal() { hideModal('quickAddModal'); }
+
+function confirmQuickAdd() {
+  const text = document.getElementById('quickAddText').value.trim();
+  if (!text) { alert('⚠️ Vui lòng paste danh sách tên'); return; }
+  
+  const lines = text.split('\n').filter(l => l.trim());
+  let ok = 0, skip = 0;
+  
+  lines.forEach(line => {
+    let name = line.trim();
+    if (name.includes('|')) name = name.split('|')[0].trim();
+    if (!name) { skip++; return; }
+    
+    if (tempChildrenList.some(c => c.full_name.toLowerCase() === name.toLowerCase())) {
+      skip++; return;
+    }
+    
+    const gender = (name.includes('Thị') || name.includes('thị')) ? 'Nữ' : 'Nam';
+    tempChildrenList.push({
+      temp_id: 'temp_' + Date.now() + '_' + Math.random(),
+      full_name: name, gender: gender, birth_year: null,
+      sibling_order: tempChildrenList.length + 1,
+      child_type: 'Con chung'
+    });
+    ok++;
+  });
+  
+  renderTempChildren();
+  closeQuickAddModal();
+  
+  let msg = '✅ Đã thêm ' + ok + ' con';
+  if (skip > 0) msg += '\n⚠️ Bỏ qua ' + skip + ' dòng';
+  alert(msg);
+}
+
+/* ============================================
+   11. LIÊN KẾT BÀI VIẾT
+   ============================================ */
+async function loadNotesCache() {
+  if (!window.sbClient) return;
+  try {
+    const { data, error } = await window.sbClient.from('notes').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    allNotesCache = data || [];
+  } catch (err) { allNotesCache = []; }
+}
+
+function renderLinkedNotes() {
+  const list = document.getElementById('linkedNotesList');
+  if (!list) return;
+  
+  if (tempLinkedNoteIds.length === 0) {
+    list.innerHTML = '<p class="empty-hint">Chưa có bài viết liên kết.</p>';
+    return;
+  }
+  
+  const linked = allNotesCache.filter(n => tempLinkedNoteIds.includes(n.id));
+  if (linked.length === 0) {
+    list.innerHTML = '<p class="empty-hint">Đang tải...</p>';
+    return;
+  }
+  
+  list.innerHTML = linked.map(n => 
+    '<div class="linked-note-item" ondblclick="goToNote(\'' + n.id + '\')">' +
+      '<span>📄</span>' +
+      '<span style="flex:1;">' + (n.title || n.content.substring(0, 50)) + '</span>' +
+      '<button type="button" onclick="event.stopPropagation(); removeLinkedNote(\'' + n.id + '\')">×</button>' +
+    '</div>'
+  ).join('');
+}
+
+function removeLinkedNote(id) {
+  tempLinkedNoteIds = tempLinkedNoteIds.filter(x => x !== id);
+  renderLinkedNotes();
+}
+
+function goToNote(noteId) {
+  const tab = document.querySelector('.tab[data-tab="ngoai-pha"]');
+  if (tab) tab.click();
+  hideModal('personFormModal');
+  document.body.style.overflow = '';
+}
+
+async function openLinkNoteModal() {
+  await loadNotesCache();
+  const list = document.getElementById('availableNotesList');
+  if (!list) return;
+  
+  if (allNotesCache.length === 0) {
+    list.innerHTML = '<p class="empty-hint">Chưa có bài viết nào.</p>';
+    showModal('linkNoteModal');
+    return;
+  }
+  
+  list.innerHTML = allNotesCache.map(n => {
+    const checked = tempLinkedNoteIds.includes(n.id) ? 'checked' : '';
+    return '<label class="note-picker-item">' +
+      '<input type="checkbox" value="' + n.id + '" ' + checked + '>' +
+      '<span>' + (n.title || n.content.substring(0, 50)) + '</span>' +
+    '</label>';
+  }).join('');
+  
+  showModal('linkNoteModal');
+}
+
+function closeLinkNoteModal() { hideModal('linkNoteModal'); }
+
+function confirmLinkNote() {
+  const cbs = document.querySelectorAll('#availableNotesList input[type="checkbox"]:checked');
+  tempLinkedNoteIds = Array.from(cbs).map(c => c.value);
+  renderLinkedNotes();
+  closeLinkNoteModal();
+}
+
+/* ============================================
+   12. LIÊN HỆ
+   ============================================ */
+function addContactRow() {
+  const list = document.getElementById('contactList');
+  if (!list) return;
+  const row = document.createElement('div');
+  row.className = 'contact-row';
+  row.innerHTML = 
+    '<input type="text" placeholder="Tên mục" class="contact-name">' +
+    '<input type="text" placeholder="Nội dung" class="contact-value">' +
+    '<button type="button" class="contact-row__remove" onclick="this.parentElement.remove()">×</button>';
+  list.appendChild(row);
+}
+
+function getContactInfo() {
+  const rows = document.querySelectorAll('#contactList .contact-row');
+  const result = [];
+  rows.forEach(r => {
+    const n = r.querySelector('.contact-name').value.trim();
+    const v = r.querySelector('.contact-value').value.trim();
+    if (n && v) result.push({ name: n, value: v });
+  });
+  return result.length > 0 ? result : null;
+}
+
+/* ============================================
+   KẾT THÚC PHẦN 1/2
+   PHẦN 2/2 sẽ có: savePerson, deletePerson, createParentChildLink,
+   createMarriageLink, createChildWithAutoCreate, loadPersonForEdit
+   ============================================ */
+/* ============================================
+   FORM LOGIC - GIA PHẢ NAM VIỆT (v2.2 - PHẦN 2/2)
+   - loadPersonForEdit
+   - savePerson
+   - deletePerson
+   - createParentChildLink
+   - createMarriageLink
+   - createChildWithAutoCreate
+   ============================================ */
+
+/* ============================================
+   13. LOAD PERSON VÀO FORM SỬA (TẦNG 2)
+   ============================================ */
+async function loadPersonForEdit(personId) {
+  if (!window.sbClient) {
+    alert('⚠️ Chưa kết nối được database');
+    return;
+  }
+
+  try {
+    // 1. Load thông tin cá nhân
+    const { data: person, error } = await window.sbClient
+      .from('persons').select('*').eq('id', personId).single();
+    if (error) throw error;
+    if (!person) throw new Error('Không tìm thấy người này');
+
+    tempOriginalPerson = person;
+
+    // 2. Điền các field cơ bản
+    const setVal = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val || '';
+    };
+
+    setVal('fullName', person.full_name);
+    setVal('gender', person.gender);
+    setVal('branch', person.branch);
+    setVal('siblingOrder', person.sibling_order);
+    setVal('birthYear', person.birth_year);
+    setVal('deathYear', person.death_year);
+    setVal('birthPlace', person.birth_place);
+    setVal('specialStatus', person.special_status);
+    setVal('occupation', person.occupation);
+    setVal('conflictNote', person.conflict_note);
+    setVal('bio', person.bio);
+    setVal('roleType', person.role_type || person.role);
+    setVal('generation', person.generation);
+    setVal('createdByName', person.created_by_name);
+
+    // 3. Avatar
+    tempAvatarData = person.avatar_url || null;
+    const av = document.getElementById('avatarPreview');
+    if (av) {
+      if (person.avatar_url) {
+        av.innerHTML = '<img src="' + person.avatar_url + '" alt="Avatar">';
+      } else {
+        av.innerHTML = '<span class="avatar-preview__placeholder">📷</span>';
+      }
+    }
+
+    // 4. Load Bố/Mẹ từ parent_child
+    const { data: parents } = await window.sbClient
+      .from('parent_child').select('parent_id, parent_role')
+      .eq('child_id', personId);
+
+    const fatherSel = document.getElementById('fatherId');
+    const motherSel = document.getElementById('motherId');
+    if (fatherSel) fatherSel.value = '';
+    if (motherSel) motherSel.value = '';
+
+    if (parents && parents.length > 0) {
+      parents.forEach(p => {
+        if (p.parent_role === 'Bố' && fatherSel) fatherSel.value = p.parent_id;
+        else if (p.parent_role === 'Mẹ' && motherSel) motherSel.value = p.parent_id;
+      });
+    }
+
+    // 5. Load Vợ/Chồng từ marriages
+    const { data: marriages } = await window.sbClient
+      .from('marriages').select('*')
+      .or('husband_id.eq.' + personId + ',wife_id.eq.' + personId);
+
+    const spouseContainer = document.getElementById('spouseRows');
+    if (spouseContainer) {
+      spouseContainer.innerHTML = '';
+      spouseRowCounter = 0;
+    }
+
+    if (marriages && marriages.length > 0) {
+      for (const m of marriages) {
+        const sId = m.husband_id === personId ? m.wife_id : m.husband_id;
+        addSpouseRow();
+        const rows = document.querySelectorAll('#spouseRows .spouse-row');
+        const lastRow = rows[rows.length - 1];
+        if (lastRow) {
+          const sel = lastRow.querySelector('.spouse-select');
+          if (sel) sel.value = sId;
+        }
+      }
+    } else {
+      addSpouseRow();
+    }
+
+    // 6. Load liên kết bài viết
+    const { data: links } = await window.sbClient
+      .from('person_notes').select('note_id').eq('person_id', personId);
+
+    tempLinkedNoteIds = links ? links.map(l => l.note_id) : [];
+    await loadNotesCache();
+    renderLinkedNotes();
+
+    // 7. Load liên hệ
+    const contactList = document.getElementById('contactList');
+    if (contactList) contactList.innerHTML = '';
+
+    if (person.contact_info) {
+      let contacts = person.contact_info;
+      if (typeof contacts === 'string') {
+        try { contacts = JSON.parse(contacts); } catch (e) { contacts = null; }
+      }
+      if (Array.isArray(contacts)) {
+        contacts.forEach(c => {
+          addContactRow();
+          const rows = document.querySelectorAll('#contactList .contact-row');
+          const lastRow = rows[rows.length - 1];
+          if (lastRow) {
+            lastRow.querySelector('.contact-name').value = c.name || '';
+            lastRow.querySelector('.contact-value').value = c.value || '';
+          }
+        });
+      }
+    }
+
+    // 8. Con cái — chỉ hiển thị thông báo (không load vào tempChildrenList)
+    tempChildrenList = [];
+    renderTempChildren();
+
+  } catch (err) {
+    console.error('Lỗi load person for edit:', err);
+    alert('❌ Không tải được thông tin: ' + err.message);
+  }
+}
+
+/* ============================================
+   14. LƯU THÔNG TIN (SAVE PERSON)
+   ============================================ */
+async function savePerson() {
+  if (!window.sbClient) {
+    alert('⚠️ Chưa kết nối được database');
+    return;
+  }
+
+  const fullName = document.getElementById('fullName').value.trim();
+  if (!fullName) {
+    alert('⚠️ Vui lòng nhập họ tên');
+    return;
+  }
+
+  const confirmMsg = currentEditingPersonId
+    ? '💾 Lưu thay đổi cho "' + fullName + '"?'
+    : '➕ Thêm cá nhân mới "' + fullName + '"?';
+  if (!confirm(confirmMsg)) return;
+
+  // Disable nút Lưu
+  const saveBtns = document.querySelectorAll('.btn--primary');
+  saveBtns.forEach(b => { b.disabled = true; b.textContent = '⏳ Đang lưu...'; });
+
+  try {
+    // 1. Chuẩn bị data
+    const personData = {
+      full_name: fullName,
+      gender: document.getElementById('gender').value || null,
+      branch: document.getElementById('branch').value || null,
+      sibling_order: parseInt(document.getElementById('siblingOrder').value) || null,
+      birth_year: parseInt(document.getElementById('birthYear').value) || null,
+      death_year: parseInt(document.getElementById('deathYear').value) || null,
+      birth_place: document.getElementById('birthPlace').value.trim() || null,
+      special_status: document.getElementById('specialStatus').value || 'Bình thường',
+      occupation: document.getElementById('occupation').value.trim() || null,
+      conflict_note: document.getElementById('conflictNote').value.trim() || null,
+      bio: document.getElementById('bio').value.trim() || null,
+      role_type: document.getElementById('roleType').value || null,
+      generation: parseInt(document.getElementById('generation').value) || null,
+      created_by_name: document.getElementById('createdByName').value.trim() || null,
+      contact_info: getContactInfo()
+    };
+
+    if (tempAvatarData) personData.avatar_url = tempAvatarData;
+
+    let personId = currentEditingPersonId;
+
+    // 2. INSERT hoặc UPDATE
+    if (currentEditingPersonId) {
+      // UPDATE
+      const { error } = await window.sbClient
+        .from('persons').update(personData).eq('id', currentEditingPersonId);
+      if (error) throw error;
+    } else {
+      // INSERT
+      personData.created_by = window.currentUser ? window.currentUser.id : null;
+      const { data: inserted, error } = await window.sbClient
+        .from('persons').insert(personData).select('id').single();
+      if (error) throw error;
+      personId = inserted.id;
+      currentEditingPersonId = personId;
+    }
+
+    // 3. Xử lý quan hệ Bố/Mẹ
+    const fatherId = document.getElementById('fatherId').value;
+    const motherId = document.getElementById('motherId').value;
+
+    // Xóa liên kết cũ
+    await window.sbClient.from('parent_child').delete().eq('child_id', personId);
+
+    // Thêm liên kết mới
+    if (fatherId) {
+      await createParentChildLink(fatherId, personId, 'Bố');
+    }
+    if (motherId) {
+      await createParentChildLink(motherId, personId, 'Mẹ');
+    }
+
+    // 4. Xử lý hôn nhân
+    const spouses = getSpouseRowsData();
+
+    // Xóa hôn nhân cũ
+    await window.sbClient.from('marriages').delete()
+      .or('husband_id.eq.' + personId + ',wife_id.eq.' + personId);
+
+    // Thêm hôn nhân mới
+    const personGender = document.getElementById('gender').value;
+    for (const sp of spouses) {
+      await createMarriageLink(personId, sp.personId, personGender, sp.order);
+    }
+
+    // 5. Xử lý liên kết bài viết
+    await window.sbClient.from('person_notes').delete().eq('person_id', personId);
+    if (tempLinkedNoteIds.length > 0) {
+      const noteLinks = tempLinkedNoteIds.map(nid => ({
+        person_id: personId, note_id: nid
+      }));
+      await window.sbClient.from('person_notes').insert(noteLinks);
+    }
+
+    // 6. Tạo con mới (nếu có trong tempChildrenList)
+    for (const child of tempChildrenList) {
+      await createChildWithAutoCreate(child, personId, personGender);
+    }
+
+    // 7. Reload danh sách
+    if (typeof window.loadAllPersons === 'function') {
+      await window.loadAllPersons();
+    }
+    if (typeof window.renderIdentityTab === 'function') {
+      window.renderIdentityTab();
+    }
+
+    alert('✅ Đã lưu thành công!\n\n' + fullName);
+
+    // 8. Quay lại tầng 1 (Xem)
+    if (currentViewMode === 'edit' && currentEditingPersonId) {
+      await showViewMode(currentEditingPersonId);
+    } else {
+      closePersonForm();
+    }
+
+  } catch (err) {
+    console.error('Lỗi save:', err);
+    alert('❌ Lỗi khi lưu:\n\n' + err.message);
+  } finally {
+    // Enable lại nút
+    document.querySelectorAll('.btn--primary').forEach(b => {
+      b.disabled = false;
+    });
+  }
+}
+
+/* ============================================
+   15. XÓA NGƯỜI (DELETE PERSON)
+   ============================================ */
+async function deletePerson() {
+  if (!currentEditingPersonId) {
+    alert('⚠️ Chưa chọn người để xóa');
+    return;
+  }
+
+  if (!window.sbClient) {
+    alert('⚠️ Chưa kết nối được database');
+    return;
+  }
+
+  try {
+    // Kiểm tra có con không
+    const { data: children } = await window.sbClient
+      .from('parent_child').select('child_id').eq('parent_id', currentEditingPersonId);
+
+    if (children && children.length > 0) {
+      alert('⚠️ KHÔNG THỂ XÓA\n\nNgười này đang có ' + children.length + 
+            ' người con trong gia phả.\n\nVui lòng xóa/xử lý các liên kết con cái trước.');
+      return;
+    }
+
+    const name = tempOriginalPerson ? tempOriginalPerson.full_name : 'người này';
+    if (!confirm('🗑️ XÓA "' + name + '"?\n\nHành động này không thể hoàn tác!')) return;
+    if (!confirm('⚠️ XÁC NHẬN LẦN 2\n\nBạn có CHẮC CHẮN muốn xóa "' + name + '"?')) return;
+
+    // Xóa liên kết trước
+    await window.sbClient.from('parent_child').delete()
+      .or('parent_id.eq.' + currentEditingPersonId + ',child_id.eq.' + currentEditingPersonId);
+
+    await window.sbClient.from('marriages').delete()
+      .or('husband_id.eq.' + currentEditingPersonId + ',wife_id.eq.' + currentEditingPersonId);
+
+    await window.sbClient.from('person_notes').delete()
+      .eq('person_id', currentEditingPersonId);
+
+    // Xóa người
+    const { error } = await window.sbClient
+      .from('persons').delete().eq('id', currentEditingPersonId);
+    if (error) throw error;
+
+    alert('✅ Đã xóa "' + name + '"');
+
+    // Reload
+    if (typeof window.loadAllPersons === 'function') {
+      await window.loadAllPersons();
+    }
+    if (typeof window.renderIdentityTab === 'function') {
+      window.renderIdentityTab();
+    }
+
+    hideModal('personFormModal');
+    document.body.style.overflow = '';
+    currentEditingPersonId = null;
+    currentViewMode = 'view';
+
+  } catch (err) {
+    console.error('Lỗi xóa:', err);
+    alert('❌ Lỗi khi xóa:\n\n' + err.message);
+  }
+}
+
+/* ============================================
+   16. TẠO LIÊN KẾT CHA-MẸ ↔ CON
+   ============================================ */
+async function createParentChildLink(parentId, childId, role) {
+  if (!window.sbClient || !parentId || !childId) return;
+
+  try {
+    // Kiểm tra đã tồn tại chưa
+    const { data: existing } = await window.sbClient
+      .from('parent_child').select('id')
+      .eq('parent_id', parentId).eq('child_id', childId).maybeSingle();
+
+    if (existing) return; // đã có
+
+    const { error } = await window.sbClient
+      .from('parent_child')
+      .insert({ parent_id: parentId, child_id: childId, parent_role: role });
+
+    if (error && error.code !== '23505') throw error; // bỏ qua lỗi trùng
+
+  } catch (err) {
+    console.error('Lỗi createParentChildLink:', err);
+  }
+}
+
+/* ============================================
+   17. TẠO LIÊN KẾT HÔN NHÂN
+   ============================================ */
+async function createMarriageLink(personId, spouseId, personGender, order) {
+  if (!window.sbClient || !personId || !spouseId) return;
+  if (personId === spouseId) return;
+
+  try {
+    // Sắp xếp husband_id / wife_id
+    let husbandId, wifeId;
+    if (personGender === 'Nam') {
+      husbandId = personId; wifeId = spouseId;
+    } else if (personGender === 'Nữ') {
+      husbandId = spouseId; wifeId = personId;
+    } else {
+      // Không xác định giới tính — dùng thứ tự
+      husbandId = personId; wifeId = spouseId;
+    }
+
+    // Kiểm tra đã tồn tại
+    const { data: existing } = await window.sbClient
+      .from('marriages').select('id')
+      .or('and(husband_id.eq.' + husbandId + ',wife_id.eq.' + wifeId + '),' +
+          'and(husband_id.eq.' + wifeId + ',wife_id.eq.' + husbandId + ')')
+      .maybeSingle();
+
+    if (existing) return;
+
+    const { error } = await window.sbClient
+      .from('marriages')
+      .insert({ husband_id: husbandId, wife_id: wifeId, marriage_order: order || 1 });
+
+    if (error && error.code !== '23505') throw error;
+
+  } catch (err) {
+    console.error('Lỗi createMarriageLink:', err);
+  }
+}
+
+/* ============================================
+   18. TẠO CON + TỰ ĐỘNG TẠO HỒ SƠ ĐỜI SAU
+   ============================================ */
+async function createChildWithAutoCreate(child, parentId, parentGender) {
+  if (!window.sbClient || !child || !parentId) return;
+
+  try {
+    const parent = tempOriginalPerson;
+    const parentGen = parent && parent.generation ? parent.generation : null;
+    const childGen = parentGen ? parentGen + 1 : null;
+
+    // Xác định chi nhánh từ cha
+    let childBranch = null;
+    if (parentGender === 'Nam' && parent) {
+      childBranch = parent.branch || null;
+    } else if (parent) {
+      // Nếu mẹ là người khai — tìm chồng để lấy chi
+      const { data: marriages } = await window.sbClient
+        .from('marriages').select('husband_id')
+        .eq('wife_id', parentId).maybeSingle();
+      if (marriages) {
+        const { data: husband } = await window.sbClient
+          .from('persons').select('branch').eq('id', marriages.husband_id).maybeSingle();
+        if (husband) childBranch = husband.branch;
+      }
+    }
+
+    // Tạo person mới cho con
+    const childData = {
+      full_name: child.full_name,
+      gender: child.gender,
+      birth_year: child.birth_year,
+      sibling_order: child.sibling_order,
+      generation: childGen,
+      branch: childBranch,
+      special_status: 'Bình thường',
+      created_by: window.currentUser ? window.currentUser.id : null,
+      created_by_name: document.getElementById('createdByName') 
+        ? document.getElementById('createdByName').value.trim() : null
+    };
+
+    const { data: inserted, error } = await window.sbClient
+      .from('persons').insert(childData).select('id').single();
+    if (error) throw error;
+
+    const childId = inserted.id;
+
+    // Liên kết cha/mẹ
+    if (parentGender === 'Nam') {
+      await createParentChildLink(parentId, childId, 'Bố');
+    } else if (parentGender === 'Nữ') {
+      await createParentChildLink(parentId, childId, 'Mẹ');
+    } else {
+      await createParentChildLink(parentId, childId, 'Bố');
+    }
+
+    // Nếu có vợ/chồng đã chọn → liên kết luôn người kia làm cha/mẹ thứ 2
+    const spouses = getSpouseRowsData();
+    if (spouses.length > 0 && child.child_type === 'Con chung') {
+      const spouseId = spouses[0].personId;
+      const otherRole = parentGender === 'Nam' ? 'Mẹ' : 'Bố';
+      await createParentChildLink(spouseId, childId, otherRole);
+    }
+
+  } catch (err) {
+    console.error('Lỗi createChildWithAutoCreate:', err);
+    throw err;
+  }
+}
+
+/* ============================================
+   KẾT THÚC PHẦN 2/2
+   ============================================ */
+
+console.log('📝 Form.js v2.2 - PHẦN 2/2 loaded');
+console.log('✅ Form.js v2.2 HOÀN CHỈNH');
