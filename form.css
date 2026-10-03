@@ -1,545 +1,804 @@
 /* ============================================
-   FORM STYLES - GIA PHẢ NAM VIỆT (v1.3)
-   - Font chữ dễ đọc (Inter, chữ nghiêng cho input)
-   - Hỗ trợ crop ảnh
-   - Hỗ trợ nhiều vợ/chồng (dynamic list)
+   FORM LOGIC - GIA PHẢ NAM VIỆT (v1.3)
+   - Crop ảnh 3:4 (Cropper.js)
+   - Gán nhanh tên con (chỉ họ tên)
+   - Nhiều vợ/chồng
+   - Xóa người (kiểm tra có con)
+   - Liên kết bài viết Ngoại phả
+   - Tên người đăng (auto + sửa được)
    ============================================ */
 
-.form-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(1, 40, 94, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-  padding: 20px;
-  overflow-y: auto;
+let currentEditingPersonId = null;
+let tempChildrenList = [];
+let tempAvatarData = null;
+let cropper = null;
+let tempLinkedNoteIds = [];
+let allNotesCache = [];
+
+/* ============================================
+   1. MỞ / ĐÓNG FORM
+   ============================================ */
+function openPersonForm(personId) {
+  console.log('📝 Mở form cho person:', personId || 'THÊM MỚI');
+  
+  currentEditingPersonId = personId || null;
+  tempChildrenList = [];
+  tempAvatarData = null;
+  tempLinkedNoteIds = [];
+  
+  const modal = document.getElementById('personFormModal');
+  const title = document.getElementById('formTitle');
+  const deleteBtn = document.getElementById('deletePersonBtn');
+  
+  if (personId) {
+    title.textContent = 'SỬA THÔNG TIN CÁ NHÂN';
+    if (deleteBtn) deleteBtn.style.display = 'inline-flex';
+    loadPersonForEdit(personId);
+  } else {
+    title.textContent = 'THÊM CÁ NHÂN MỚI';
+    if (deleteBtn) deleteBtn.style.display = 'none';
+    resetForm();
+    autoFillCreatedByName();
+  }
+  
+  populateRelationDropdowns();
+  renderSpouseRows();
+  renderTempChildren();
+  renderLinkedNotes();
+  
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
 }
 
-.form-modal__content {
-  background: #FFFFFF;
-  border-radius: 16px;
-  width: 100%;
-  max-width: 760px;
-  max-height: 92vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 20px 60px rgba(1, 40, 94, 0.3);
-  animation: modalFadeIn 0.3s ease;
+function closePersonForm() {
+  if (!confirm('Bạn có chắc muốn hủy? Mọi thay đổi chưa lưu sẽ mất.')) return;
+  closePersonFormNoConfirm();
 }
 
-.form-modal--small .form-modal__content {
-  max-width: 560px;
+function closePersonFormNoConfirm() {
+  document.getElementById('personFormModal').style.display = 'none';
+  document.body.style.overflow = '';
+  currentEditingPersonId = null;
+  tempChildrenList = [];
+  tempAvatarData = null;
+  tempLinkedNoteIds = [];
 }
 
-@keyframes modalFadeIn {
-  from { opacity: 0; transform: translateY(20px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+function resetForm() {
+  const inputs = ['fullName', 'gender', 'branch', 'siblingOrder', 'birthYear', 
+                  'deathYear', 'birthPlace', 'specialStatus', 'occupation', 
+                  'conflictNote', 'bio', 'fatherId', 'motherId', 
+                  'roleType', 'generation', 'createdByName'];
+  
+  inputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      if (el.tagName === 'SELECT') el.selectedIndex = 0;
+      else el.value = '';
+    }
+  });
+  
+  document.getElementById('avatarPreview').innerHTML = '<span class="avatar-preview__placeholder">📷</span>';
+  document.getElementById('contactList').innerHTML = '';
+  document.getElementById('spouseRows').innerHTML = '';
+  renderTempChildren();
+  renderLinkedNotes();
 }
 
-/* ===== HEADER ===== */
-.form-modal__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 24px;
-  border-bottom: 2px solid #E8DCA0;
-  background: #F5EEB3;
-  border-radius: 16px 16px 0 0;
+async function autoFillCreatedByName() {
+  if (!window.currentUser) return;
+  try {
+    const { data: profile } = await window.sbClient
+      .from('profiles')
+      .select('display_name')
+      .eq('id', window.currentUser.id)
+      .maybeSingle();
+    
+    const nameInput = document.getElementById('createdByName');
+    if (nameInput && profile && profile.display_name) {
+      nameInput.value = profile.display_name;
+    } else if (nameInput && window.currentUser.email) {
+      nameInput.value = window.currentUser.email;
+    }
+  } catch (err) { console.error(err); }
 }
 
-.form-modal__title {
-  font-family: 'Noto Serif', serif;
-  font-size: 20px;
-  font-weight: 700;
-  color: #01285E;
-  margin: 0;
-  letter-spacing: 0.5px;
+/* ============================================
+   2. CROP ẢNH
+   ============================================ */
+function openCropModal(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  if (!file.type.startsWith('image/')) {
+    alert('⚠️ Vui lòng chọn file ảnh (JPG, PNG...)');
+    return;
+  }
+  
+  if (file.size > 10 * 1024 * 1024) {
+    alert('⚠️ File quá lớn (max 10MB)');
+    return;
+  }
+  
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const cropImage = document.getElementById('cropImage');
+    cropImage.src = e.target.result;
+    document.getElementById('cropModal').style.display = 'flex';
+    
+    cropImage.onload = () => {
+      if (cropper) cropper.destroy();
+      cropper = new Cropper(cropImage, {
+        aspectRatio: 3 / 4,
+        viewMode: 1,
+        autoCropArea: 0.85,
+        responsive: true,
+        background: false,
+        modal: true,
+        guides: true,
+        highlight: false,
+        dragMode: 'move'
+      });
+    };
+  };
+  reader.readAsDataURL(file);
 }
 
-.form-modal__close {
-  background: transparent;
-  border: none;
-  font-size: 28px;
-  color: #627794;
-  cursor: pointer;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-  line-height: 1;
+function closeCropModal() {
+  if (cropper) { cropper.destroy(); cropper = null; }
+  document.getElementById('cropModal').style.display = 'none';
+  document.getElementById('cropImage').src = '';
+  document.getElementById('avatarInput').value = '';
 }
 
-.form-modal__close:hover {
-  background: rgba(1, 40, 94, 0.1);
-  color: #01285E;
+function rotateCropImage(degree) { if (cropper) cropper.rotate(degree); }
+function flipCropImage(direction) {
+  if (!cropper) return;
+  if (direction === 'h') cropper.scaleX(-1);
+  else cropper.scaleY(-1);
+}
+function resetCropImage() { if (cropper) cropper.reset(); }
+
+function confirmCrop() {
+  if (!cropper) return;
+  const canvas = cropper.getCroppedCanvas({
+    width: 600, height: 800,
+    imageSmoothingEnabled: true,
+    imageSmoothingQuality: 'high'
+  });
+  
+  canvas.toBlob((blob) => {
+    if (blob.size > 300 * 1024) {
+      canvas.toBlob((smallerBlob) => convertBlobToBase64(smallerBlob), 'image/webp', 0.6);
+    } else {
+      convertBlobToBase64(blob);
+    }
+  }, 'image/webp', 0.85);
 }
 
-/* ===== BODY ===== */
-.form-modal__body {
-  padding: 22px 24px;
-  overflow-y: auto;
-  flex: 1;
+function convertBlobToBase64(blob) {
+  const reader = new FileReader();
+  reader.onloadend = () => {
+    tempAvatarData = reader.result;
+    document.getElementById('avatarPreview').innerHTML = '<img src="' + tempAvatarData + '" alt="Avatar">';
+    closeCropModal();
+  };
+  reader.readAsDataURL(blob);
 }
 
-/* ===== SECTIONS ===== */
-.form-section {
-  margin-bottom: 26px;
-  padding-bottom: 18px;
-  border-bottom: 1px dashed #E8DCA0;
+/* ============================================
+   3. POPULATE DROPDOWNS
+   ============================================ */
+function populateRelationDropdowns() {
+  const persons = window.allPersons || [];
+  
+  const fatherSelect = document.getElementById('fatherId');
+  const motherSelect = document.getElementById('motherId');
+  if (!fatherSelect || !motherSelect) return;
+  
+  const males = persons.filter(p => p.gender === 'Nam' && p.id !== currentEditingPersonId && !p.is_deleted);
+  fatherSelect.innerHTML = '<option value="">-- Chọn bố --</option>' +
+    males.map(p => '<option value="' + p.id + '">' + p.full_name + ' (Đời ' + p.generation + ')</option>').join('');
+  
+  const females = persons.filter(p => p.gender === 'Nữ' && p.id !== currentEditingPersonId && !p.is_deleted);
+  motherSelect.innerHTML = '<option value="">-- Chọn mẹ --</option>' +
+    females.map(p => '<option value="' + p.id + '">' + p.full_name + ' (Đời ' + p.generation + ')</option>').join('');
 }
 
-.form-section:last-child {
-  border-bottom: none;
-  margin-bottom: 0;
-  padding-bottom: 0;
+/* ============================================
+   4. VỢ/CHỒNG - DYNAMIC LIST
+   ============================================ */
+let spouseRowCounter = 0;
+
+function addSpouseRow() {
+  spouseRowCounter++;
+  const container = document.getElementById('spouseRows');
+  const rowId = 'spouse_row_' + spouseRowCounter;
+  
+  const row = document.createElement('div');
+  row.className = 'spouse-row';
+  row.id = rowId;
+  row.innerHTML = 
+    '<span class="spouse-row__label">Vợ/Chồng ' + spouseRowCounter + ':</span>' +
+    '<select class="spouse-select"><option value="">-- Chọn vợ/chồng --</option></select>' +
+    '<button type="button" class="spouse-row__remove" onclick="removeSpouseRow(\'' + rowId + '\')" title="Xóa">×</button>';
+  
+  container.appendChild(row);
+  populateSpouseSelect(row.querySelector('.spouse-select'));
 }
 
-.form-section__title {
-  font-family: 'Noto Serif', serif;
-  font-size: 14px;
-  font-weight: 700;
-  color: #C49504;
-  text-transform: uppercase;
-  letter-spacing: 1.5px;
-  margin: 0 0 16px 0;
-  padding-left: 10px;
-  border-left: 4px solid #C49504;
+function removeSpouseRow(rowId) {
+  const row = document.getElementById(rowId);
+  if (row) row.remove();
+  const rows = document.querySelectorAll('#spouseRows .spouse-row');
+  rows.forEach((r, idx) => {
+    r.querySelector('.spouse-row__label').textContent = 'Vợ/Chồng ' + (idx + 1) + ':';
+  });
 }
 
-/* ===== FORM ROWS ===== */
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  margin-bottom: 12px;
+function populateSpouseSelect(select) {
+  const persons = window.allPersons || [];
+  select.innerHTML = '<option value="">-- Chọn vợ/chồng --</option>' +
+    persons.filter(p => p.id !== currentEditingPersonId && !p.is_deleted)
+      .map(p => '<option value="' + p.id + '">' + p.full_name + ' (Đời ' + p.generation + ')</option>').join('');
 }
 
-@media (max-width: 600px) {
-  .form-row { grid-template-columns: 1fr; gap: 10px; }
+function renderSpouseRows() {
+  document.getElementById('spouseRows').innerHTML = '';
+  spouseRowCounter = 0;
+  addSpouseRow();
 }
 
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+function getSpouseRowsData() {
+  const rows = document.querySelectorAll('#spouseRows .spouse-row');
+  const spouses = [];
+  rows.forEach((row, idx) => {
+    const select = row.querySelector('.spouse-select');
+    if (select && select.value) {
+      spouses.push({ personId: select.value, order: idx + 1 });
+    }
+  });
+  return spouses;
 }
 
-.form-group--full {
-  grid-column: 1 / -1;
+/* ============================================
+   5. QUẢN LÝ CON
+   ============================================ */
+function openAddChildModal() {
+  document.getElementById('addChildModal').style.display = 'flex';
+  document.getElementById('childName').value = '';
+  document.getElementById('childBirthYear').value = '';
+  document.getElementById('childOrder').value = '';
 }
 
-/* ===== LABELS — Chữ đứng, đậm, dễ đọc ===== */
-.form-label {
-  font-family: 'Inter', 'Roboto', 'Be Vietnam Pro', sans-serif;
-  font-style: normal;
-  font-weight: 600;
-  font-size: 14px;
-  color: #1A202C;
-  margin-bottom: 3px;
-  line-height: 1.4;
+function closeAddChildModal() {
+  document.getElementById('addChildModal').style.display = 'none';
 }
 
-.required {
-  color: #C62828;
-  font-weight: 700;
+function confirmAddChild() {
+  const name = document.getElementById('childName').value.trim();
+  const gender = document.getElementById('childGender').value;
+  const birthYear = document.getElementById('childBirthYear').value;
+  const order = document.getElementById('childOrder').value;
+  const type = document.getElementById('childType').value;
+  
+  if (!name) { alert('⚠️ Vui lòng nhập họ tên con'); return; }
+  
+  tempChildrenList.push({
+    temp_id: 'temp_' + Date.now(),
+    full_name: name, gender: gender,
+    birth_year: birthYear ? parseInt(birthYear) : null,
+    sibling_order: order ? parseInt(order) : null,
+    child_type: type
+  });
+  
+  renderTempChildren();
+  closeAddChildModal();
 }
 
-/* ===== INPUTS — Chữ nghiêng, dễ đọc ===== */
-.form-input {
-  width: 100%;
-  padding: 10px 14px;
-  border: 1.5px solid #E8DCA0;
-  border-radius: 8px;
-  font-family: 'Inter', 'Roboto', 'Be Vietnam Pro', sans-serif;
-  font-style: italic;
-  font-size: 15px;
-  color: #2D3748;
-  background: #FFFFFF;
-  transition: all 0.2s;
-  box-sizing: border-box;
-  line-height: 1.6;
+function renderTempChildren() {
+  const list = document.getElementById('childrenList');
+  if (!list) return;
+  
+  if (tempChildrenList.length === 0) {
+    list.innerHTML = '<p class="empty-hint">Chưa có con nào. Bấm "+ Thêm con" để thêm.</p>';
+    return;
+  }
+  
+  list.innerHTML = tempChildrenList.map((child, idx) => {
+    const yearStr = child.birth_year ? ' • ' + child.birth_year : '';
+    return '<div class="child-item">' +
+      '<div class="child-item__info">' +
+        '<div class="child-item__name">' + (idx + 1) + '. ' + child.full_name + '</div>' +
+        '<div class="child-item__meta">' + child.gender + yearStr + '</div>' +
+      '</div>' +
+      '<div class="child-item__type">' + child.child_type + '</div>' +
+      '<div class="child-item__actions">' +
+        '<button class="child-item__btn" onclick="removeTempChild(\'' + child.temp_id + '\')" title="Xóa">🗑️</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
 }
 
-.form-input:focus {
-  outline: none;
-  border-color: #C49504;
-  box-shadow: 0 0 0 3px rgba(196, 149, 4, 0.15);
+function removeTempChild(tempId) {
+  if (!confirm('Xóa con này khỏi danh sách?')) return;
+  tempChildrenList = tempChildrenList.filter(c => c.temp_id !== tempId);
+  renderTempChildren();
 }
 
-.form-input::placeholder {
-  color: #A0AEC0;
-  font-style: italic;
+/* ============================================
+   6. GÁN NHANH TÊN CON
+   ============================================ */
+function openQuickAddModal() {
+  document.getElementById('quickAddModal').style.display = 'flex';
+  document.getElementById('quickAddText').value = '';
 }
 
-.form-input--textarea {
-  resize: vertical;
-  min-height: 80px;
-  line-height: 1.7;
+function closeQuickAddModal() {
+  document.getElementById('quickAddModal').style.display = 'none';
 }
 
-.form-input--mono {
-  font-family: 'Courier New', monospace;
-  font-style: normal;
-  font-size: 14px;
-  line-height: 1.7;
+function confirmQuickAdd() {
+  const text = document.getElementById('quickAddText').value.trim();
+  if (!text) { alert('⚠️ Vui lòng paste danh sách tên con'); return; }
+  
+  const lines = text.split('\n').filter(line => line.trim());
+  let successCount = 0, skipCount = 0;
+  
+  lines.forEach(line => {
+    let name = line.trim();
+    if (!name) { skipCount++; return; }
+    if (name.includes('|')) name = name.split('|')[0].trim();
+    if (!name) { skipCount++; return; }
+    
+    const isDuplicate = tempChildrenList.some(c => 
+      c.full_name.toLowerCase() === name.toLowerCase()
+    );
+    if (isDuplicate) { skipCount++; return; }
+    
+    let gender = 'Nam';
+    if (name.includes('Thị') || name.includes('thị')) gender = 'Nữ';
+    
+    tempChildrenList.push({
+      temp_id: 'temp_' + Date.now() + '_' + Math.random(),
+      full_name: name, gender: gender,
+      birth_year: null,
+      sibling_order: tempChildrenList.length + 1,
+      child_type: 'Con chung'
+    });
+    successCount++;
+  });
+  
+  renderTempChildren();
+  closeQuickAddModal();
+  
+  let msg = '✅ Đã thêm ' + successCount + ' con vào danh sách';
+  if (skipCount > 0) msg += '\n⚠️ Bỏ qua ' + skipCount + ' dòng (trùng hoặc trống)';
+  alert(msg);
 }
 
-select.form-input {
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23627794' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 16px;
-  padding-right: 36px;
-  font-style: normal;
+/* ============================================
+   7. LIÊN KẾT BÀI VIẾT NGOẠI PHẢ
+   ============================================ */
+async function loadNotesCache() {
+  if (!window.sbClient) return;
+  try {
+    const { data, error } = await window.sbClient
+      .from('notes')
+      .select('*')
+      .eq('is_published', true)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    allNotesCache = data || [];
+  } catch (err) {
+    console.error('Lỗi load notes:', err);
+    allNotesCache = [];
+  }
 }
 
-/* ===== HINT ===== */
-.form-hint {
-  font-size: 12px;
-  color: #A0AEC0;
-  font-style: italic;
-  margin: 3px 0 0 0;
-  line-height: 1.4;
+function renderLinkedNotes() {
+  const list = document.getElementById('linkedNotesList');
+  if (!list) return;
+  
+  if (tempLinkedNoteIds.length === 0) {
+    list.innerHTML = '<p class="empty-hint">Chưa có bài viết liên kết.</p>';
+    return;
+  }
+  
+  const linkedNotes = allNotesCache.filter(n => tempLinkedNoteIds.includes(n.id));
+  
+  list.innerHTML = linkedNotes.map(note => 
+    '<div class="linked-note-item" ondblclick="goToNote(\'' + note.id + '\')" title="Bấm đúp để chuyển tới bài viết">' +
+      '<span class="linked-note-item__icon">📄</span>' +
+      '<span class="linked-note-item__title">' + (note.title || '(Không có tiêu đề)') + '</span>' +
+      '<button class="linked-note-item__remove" onclick="event.stopPropagation(); removeLinkedNote(\'' + note.id + '\')" title="Bỏ liên kết">×</button>' +
+    '</div>'
+  ).join('');
 }
 
-.form-hint-box {
-  background: #F5EEB3;
-  border-left: 4px solid #C49504;
-  padding: 12px 16px;
-  border-radius: 6px;
-  margin-bottom: 14px;
-  font-size: 13px;
-  color: #2D3748;
-  line-height: 1.7;
-  font-style: italic;
+function removeLinkedNote(noteId) {
+  tempLinkedNoteIds = tempLinkedNoteIds.filter(id => id !== noteId);
+  renderLinkedNotes();
 }
 
-.form-hint-box p { margin: 0 0 4px 0; }
-.form-hint-box p:last-child { margin-bottom: 0; }
-.form-hint-box strong { color: #8B6D00; font-style: normal; }
-
-/* ===== AVATAR UPLOAD ===== */
-.avatar-upload {
-  display: flex;
-  gap: 18px;
-  align-items: flex-start;
+function goToNote(noteId) {
+  const tab = document.querySelector('.tab[data-tab="ngoai-pha"]');
+  if (tab) tab.click();
+  closePersonFormNoConfirm();
+  setTimeout(() => {
+    const el = document.getElementById('note-' + noteId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.background = '#FFF9E5';
+      setTimeout(() => { el.style.background = ''; }, 2000);
+    }
+  }, 300);
 }
 
-.avatar-preview {
-  width: 120px;
-  height: 160px;
-  border-radius: 10px;
-  border: 2px dashed #C9B896;
-  background: #FAFAF7;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  flex-shrink: 0;
-  position: relative;
+async function openLinkNoteModal() {
+  await loadNotesCache();
+  const list = document.getElementById('availableNotesList');
+  
+  if (allNotesCache.length === 0) {
+    list.innerHTML = '<p class="empty-hint">Chưa có bài viết nào ở Ngoại phả.</p>';
+    document.getElementById('linkNoteModal').style.display = 'flex';
+    return;
+  }
+  
+  list.innerHTML = allNotesCache.map(note => {
+    const checked = tempLinkedNoteIds.includes(note.id) ? 'checked' : '';
+    return '<label class="note-picker-item">' +
+      '<input type="checkbox" value="' + note.id + '" ' + checked + '>' +
+      '<span>' + (note.title || '(Không có tiêu đề)') + '</span>' +
+    '</label>';
+  }).join('');
+  
+  document.getElementById('linkNoteModal').style.display = 'flex';
 }
 
-.avatar-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+function closeLinkNoteModal() {
+  document.getElementById('linkNoteModal').style.display = 'none';
 }
 
-.avatar-preview__placeholder {
-  font-size: 36px;
-  color: #C9B896;
+function confirmLinkNote() {
+  const checkboxes = document.querySelectorAll('#availableNotesList input[type="checkbox"]:checked');
+  tempLinkedNoteIds = Array.from(checkboxes).map(cb => cb.value);
+  renderLinkedNotes();
+  closeLinkNoteModal();
 }
 
-.avatar-actions {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* ============================================
+   8. THÔNG TIN LIÊN HỆ
+   ============================================ */
+function addContactRow() {
+  const list = document.getElementById('contactList');
+  const row = document.createElement('div');
+  row.className = 'contact-row';
+  row.innerHTML = 
+    '<input type="text" placeholder="Tên mục (VD: Điện thoại)" class="contact-name">' +
+    '<input type="text" placeholder="Nội dung" class="contact-value">' +
+    '<button type="button" class="contact-row__remove" onclick="this.parentElement.remove()">×</button>';
+  list.appendChild(row);
 }
 
-/* ===== CROP MODAL ===== */
-.crop-modal__content {
-  background: #FFFFFF;
-  border-radius: 16px;
-  width: 100%;
-  max-width: 700px;
-  max-height: 92vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 20px 60px rgba(1, 40, 94, 0.3);
+function getContactInfo() {
+  const rows = document.querySelectorAll('#contactList .contact-row');
+  const contacts = [];
+  rows.forEach(row => {
+    const name = row.querySelector('.contact-name').value.trim();
+    const value = row.querySelector('.contact-value').value.trim();
+    if (name && value) contacts.push({ name, value });
+  });
+  return contacts.length > 0 ? contacts : null;
 }
 
-.crop-modal__image-container {
-  flex: 1;
-  overflow: hidden;
-  background: #1A202C;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  min-height: 300px;
+/* ============================================
+   9. LƯU THÔNG TIN
+   ============================================ */
+async function savePerson() {
+  const fullName = document.getElementById('fullName').value.trim();
+  const gender = document.getElementById('gender').value;
+  
+  if (!fullName) { alert('⚠️ Vui lòng nhập Họ và tên'); document.getElementById('fullName').focus(); return; }
+  if (!gender) { alert('⚠️ Vui lòng chọn Giới tính'); document.getElementById('gender').focus(); return; }
+  if (!window.sbClient) { alert('⚠️ Chưa kết nối Supabase'); return; }
+  
+  const user = await window.sbClient.auth.getUser();
+  if (!user.data.user) { alert('⚠️ Bạn cần đăng nhập trước khi lưu'); return; }
+  
+  const roleType = document.getElementById('roleType').value;
+  let role = 'Huyết thống';
+  if (roleType === 'Dâu/Rể') role = 'Phối ngẫu';
+  
+  const personData = {
+    full_name: fullName,
+    gender: gender,
+    role: role,
+    role_type: roleType,
+    branch: document.getElementById('branch').value.trim() || null,
+    generation: parseInt(document.getElementById('generation').value),
+    sibling_order: parseInt(document.getElementById('siblingOrder').value) || null,
+    birth_year: parseInt(document.getElementById('birthYear').value) || null,
+    death_year: parseInt(document.getElementById('deathYear').value) || null,
+    birth_place: document.getElementById('birthPlace').value.trim() || null,
+    special_status: document.getElementById('specialStatus').value,
+    occupation: document.getElementById('occupation').value.trim() || null,
+    conflict_note: document.getElementById('conflictNote').value.trim() || null,
+    bio: document.getElementById('bio').value.trim() || null,
+    contact_info: getContactInfo(),
+    avatar_url: tempAvatarData,
+    linked_note_ids: tempLinkedNoteIds.length > 0 ? tempLinkedNoteIds : null,
+    created_by_name: document.getElementById('createdByName').value.trim() || null,
+    updated_by: user.data.user.id
+  };
+  
+  if (personData.death_year) personData.is_deceased = true;
+  if (personData.special_status === 'Không rõ') personData.is_unknown = true;
+  
+  try {
+    let personId = currentEditingPersonId;
+    
+    if (currentEditingPersonId) {
+      const { error } = await window.sbClient
+        .from('persons')
+        .update(personData)
+        .eq('id', currentEditingPersonId);
+      if (error) throw error;
+    } else {
+      const { data, error } = await window.sbClient
+        .from('persons')
+        .insert(personData)
+        .select()
+        .single();
+      if (error) throw error;
+      personId = data.id;
+    }
+    
+    const fatherId = document.getElementById('fatherId').value;
+    if (fatherId) await createParentChildLink(fatherId, personId, 'Bố');
+    
+    const motherId = document.getElementById('motherId').value;
+    if (motherId) await createParentChildLink(motherId, personId, 'Mẹ');
+    
+    const spouseRows = getSpouseRowsData();
+    for (const sp of spouseRows) {
+      await createMarriageLink(personId, sp.personId, personData.gender, sp.order);
+    }
+    
+    if (tempChildrenList.length > 0) {
+      const primarySpouseId = spouseRows.length > 0 ? spouseRows[0].personId : null;
+      for (const child of tempChildrenList) {
+        await createChildWithAutoCreate(personId, personData.generation, child, primarySpouseId);
+      }
+    }
+    
+    alert('✅ Đã lưu thành công!');
+    closePersonFormNoConfirm();
+    
+    if (typeof loadAllData === 'function') await loadAllData();
+    
+  } catch (err) {
+    console.error('❌ Lỗi lưu:', err);
+    alert('❌ Lỗi: ' + err.message);
+  }
 }
 
-.crop-modal__image-container img {
-  max-width: 100%;
-  max-height: 500px;
-  display: block;
+/* ============================================
+   10. XÓA NGƯỜI
+   ============================================ */
+async function deletePerson() {
+  if (!currentEditingPersonId) return;
+  if (!window.sbClient) return;
+  
+  const { data: children, error: checkError } = await window.sbClient
+    .from('parent_child')
+    .select('id')
+    .eq('parent_id', currentEditingPersonId);
+  
+  if (checkError) {
+    alert('❌ Lỗi kiểm tra: ' + checkError.message);
+    return;
+  }
+  
+  if (children && children.length > 0) {
+    alert('⚠️ KHÔNG THỂ XÓA!\n\nNgười này đang có ' + children.length + ' người con liên kết.\n\nVui lòng xóa con trước, hoặc bỏ liên kết cha-con.');
+    return;
+  }
+  
+  const fullName = document.getElementById('fullName').value.trim() || 'người này';
+  if (!confirm('⚠️ Bạn có chắc muốn XÓA "' + fullName + '"?\n\nHành động này KHÔNG THỂ HOÀN TÁC!')) return;
+  if (!confirm('⚠️ XÁC NHẬN LẦN CUỐI:\n\nXóa "' + fullName + '" khỏi gia phả?')) return;
+  
+  try {
+    await window.sbClient.from('marriages')
+      .delete()
+      .or('husband_id.eq.' + currentEditingPersonId + ',wife_id.eq.' + currentEditingPersonId);
+    
+    await window.sbClient.from('parent_child')
+      .delete()
+      .or('parent_id.eq.' + currentEditingPersonId + ',child_id.eq.' + currentEditingPersonId);
+    
+    const { error } = await window.sbClient
+      .from('persons')
+      .delete()
+      .eq('id', currentEditingPersonId);
+    
+    if (error) throw error;
+    
+    alert('✅ Đã xóa thành công!');
+    closePersonFormNoConfirm();
+    
+    if (typeof loadAllData === 'function') await loadAllData();
+    
+  } catch (err) {
+    console.error('❌ Lỗi xóa:', err);
+    alert('❌ Lỗi xóa: ' + err.message);
+  }
 }
 
-.crop-modal__tools {
-  display: flex;
-  gap: 8px;
-  padding: 12px 20px;
-  background: #F5EEB3;
-  border-top: 1px solid #E8DCA0;
-  border-bottom: 1px solid #E8DCA0;
-  flex-wrap: wrap;
+/* ============================================
+   11. TẠO LIÊN KẾT QUAN HỆ
+   ============================================ */
+async function createParentChildLink(parentId, childId, parentRole) {
+  const { data: existing } = await window.sbClient
+    .from('parent_child').select('id')
+    .eq('parent_id', parentId).eq('child_id', childId).maybeSingle();
+  if (existing) return;
+  
+  const { error } = await window.sbClient.from('parent_child').insert({
+    parent_id: parentId, child_id: childId, parent_role: parentRole,
+    relation: 'Con chung', child_type: 'Con chung', is_family_member: true
+  });
+  if (error) throw error;
 }
 
-/* ===== BUTTONS ===== */
-.btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 8px;
-  font-family: 'Inter', 'Roboto', 'Be Vietnam Pro', sans-serif;
-  font-style: normal;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  justify-content: center;
+async function createMarriageLink(personId, spouseId, gender, order) {
+  const husbandId = gender === 'Nam' ? personId : spouseId;
+  const wifeId = gender === 'Nam' ? spouseId : personId;
+  
+  const { data: existing } = await window.sbClient
+    .from('marriages').select('id')
+    .eq('husband_id', husbandId).eq('wife_id', wifeId).maybeSingle();
+  if (existing) return;
+  
+  let status = 'Chính thất';
+  if (order === 2) status = 'Kế thất';
+  else if (order >= 3) status = 'Thứ thất';
+  
+  const { error } = await window.sbClient.from('marriages').insert({
+    husband_id: husbandId, wife_id: wifeId, status: status
+  });
+  if (error) throw error;
 }
 
-.btn--primary { background: #C49504; color: #FFFFFF; }
-.btn--primary:hover {
-  background: #8B6D00;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(196, 149, 4, 0.3);
+async function createChildWithAutoCreate(parentId, parentGeneration, childData, spouseId) {
+  try {
+    const childRecord = {
+      full_name: childData.full_name,
+      gender: childData.gender,
+      generation: parentGeneration + 1,
+      birth_year: childData.birth_year,
+      sibling_order: childData.sibling_order,
+      role: 'Huyết thống',
+      role_type: 'Huyết thống',
+      special_status: 'Bình thường',
+      created_by_name: document.getElementById('createdByName').value.trim() || null
+    };
+    
+    const { data: newChild, error: childError } = await window.sbClient
+      .from('persons').insert(childRecord).select().single();
+    if (childError) throw childError;
+    
+    const { data: parent } = await window.sbClient
+      .from('persons').select('gender').eq('id', parentId).single();
+    
+    const parentRole = parent.gender === 'Nam' ? 'Bố' : 'Mẹ';
+    const isFamilyMember = ['Con chung', 'Con riêng', 'Con ngoài giá thú', 'Con nuôi'].includes(childData.child_type);
+    
+    await window.sbClient.from('parent_child').insert({
+      parent_id: parentId, child_id: newChild.id, parent_role: parentRole,
+      relation: childData.child_type, child_type: childData.child_type,
+      is_family_member: isFamilyMember
+    });
+    
+    if (childData.child_type === 'Con chung' && spouseId) {
+      const { data: spouse } = await window.sbClient
+        .from('persons').select('gender').eq('id', spouseId).single();
+      
+      if (spouse) {
+        const spouseRole = spouse.gender === 'Nam' ? 'Bố' : 'Mẹ';
+        await window.sbClient.from('parent_child').insert({
+          parent_id: spouseId, child_id: newChild.id, parent_role: spouseRole,
+          relation: 'Con chung', child_type: 'Con chung', is_family_member: true
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Lỗi tạo con:', err);
+    throw err;
+  }
 }
 
-.btn--ghost {
-  background: transparent;
-  color: #01285E;
-  border: 1.5px solid #C9B896;
-}
-.btn--ghost:hover {
-  background: #F5EEB3;
-  border-color: #C49504;
-}
-
-.btn--small {
-  padding: 7px 14px;
-  font-size: 13px;
-}
-
-/* ===== FORM ACTIONS ===== */
-.form-actions-inline {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
-}
-
-/* ===== SPOUSE LIST (Nhiều vợ/chồng) ===== */
-.spouse-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.spouse-row {
-  display: grid;
-  grid-template-columns: 100px 1fr auto;
-  gap: 10px;
-  align-items: center;
-}
-
-.spouse-row__label {
-  font-family: 'Inter', 'Roboto', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  color: #627794;
-  font-style: normal;
-}
-
-.spouse-row select {
-  width: 100%;
-  padding: 9px 12px;
-  border: 1.5px solid #E8DCA0;
-  border-radius: 6px;
-  font-family: 'Inter', 'Roboto', sans-serif;
-  font-size: 14px;
-  color: #2D3748;
-  background: #FFFFFF;
-}
-
-.spouse-row__remove {
-  background: transparent;
-  border: none;
-  font-size: 18px;
-  color: #C62828;
-  cursor: pointer;
-  padding: 6px 10px;
-  border-radius: 6px;
-  transition: all 0.2s;
-}
-.spouse-row__remove:hover { background: #FFEBEE; }
-
-/* ===== CHILDREN LIST ===== */
-.children-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.child-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 14px;
-  background: #FAFAF7;
-  border: 1px solid #E8DCA0;
-  border-radius: 8px;
-  font-size: 14px;
-  animation: slideIn 0.2s ease;
+/* ============================================
+   12. LOAD DỮ LIỆU ĐỂ SỬA
+   ============================================ */
+async function loadPersonForEdit(personId) {
+  try {
+    const { data: person, error } = await window.sbClient
+      .from('persons').select('*').eq('id', personId).single();
+    if (error) throw error;
+    
+    document.getElementById('fullName').value = person.full_name || '';
+    document.getElementById('gender').value = person.gender || '';
+    document.getElementById('roleType').value = person.role_type || 'Huyết thống';
+    document.getElementById('branch').value = person.branch || '';
+    document.getElementById('generation').value = person.generation || 1;
+    document.getElementById('siblingOrder').value = person.sibling_order || '';
+    document.getElementById('birthYear').value = person.birth_year || '';
+    document.getElementById('deathYear').value = person.death_year || '';
+    document.getElementById('birthPlace').value = person.birth_place || '';
+    document.getElementById('specialStatus').value = person.special_status || 'Bình thường';
+    document.getElementById('occupation').value = person.occupation || '';
+    document.getElementById('conflictNote').value = person.conflict_note || '';
+    document.getElementById('bio').value = person.bio || '';
+    document.getElementById('createdByName').value = person.created_by_name || '';
+    
+    if (person.avatar_url) {
+      tempAvatarData = person.avatar_url;
+      document.getElementById('avatarPreview').innerHTML = '<img src="' + person.avatar_url + '" alt="Avatar">';
+    }
+    
+    if (person.contact_info && Array.isArray(person.contact_info)) {
+      const list = document.getElementById('contactList');
+      list.innerHTML = '';
+      person.contact_info.forEach(c => {
+        const row = document.createElement('div');
+        row.className = 'contact-row';
+        row.innerHTML = 
+          '<input type="text" value="' + c.name + '" class="contact-name">' +
+          '<input type="text" value="' + c.value + '" class="contact-value">' +
+          '<button type="button" class="contact-row__remove" onclick="this.parentElement.remove()">×</button>';
+        list.appendChild(row);
+      });
+    }
+    
+    // Load vợ/chồng
+    document.getElementById('spouseRows').innerHTML = '';
+    spouseRowCounter = 0;
+    const { data: marriages } = await window.sbClient
+      .from('marriages').select('*')
+      .or('husband_id.eq.' + personId + ',wife_id.eq.' + personId);
+    
+    if (marriages && marriages.length > 0) {
+      marriages.forEach(m => {
+        const spouseId = m.husband_id === personId ? m.wife_id : m.husband_id;
+        spouseRowCounter++;
+        const container = document.getElementById('spouseRows');
+        const rowId = 'spouse_row_' + spouseRowCounter;
+        const row = document.createElement('div');
+        row.className = 'spouse-row';
+        row.id = rowId;
+        row.innerHTML = 
+          '<span class="spouse-row__label">Vợ/Chồng ' + spouseRowCounter + ':</span>' +
+          '<select class="spouse-select"><option value="">-- Chọn vợ/chồng --</option></select>' +
+          '<button type="button" class="spouse-row__remove" onclick="removeSpouseRow(\'' + rowId + '\')" title="Xóa">×</button>';
+        container.appendChild(row);
+        populateSpouseSelect(row.querySelector('.spouse-select'));
+        row.querySelector('.spouse-select').value = spouseId;
+      });
+    } else {
+      addSpouseRow();
+    }
+    
+    // Load bài viết liên kết
+    tempLinkedNoteIds = person.linked_note_ids || [];
+    if (tempLinkedNoteIds.length > 0) await loadNotesCache();
+    renderLinkedNotes();
+    
+  } catch (err) {
+    console.error('Lỗi load person:', err);
+    alert('❌ Không load được dữ liệu: ' + err.message);
+  }
 }
 
-@keyframes slideIn {
-  from { opacity: 0; transform: translateX(-10px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-.child-item__info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.child-item__name {
-  font-family: 'Inter', 'Roboto', sans-serif;
-  font-weight: 600;
-  color: #01285E;
-  font-style: normal;
-}
-.child-item__meta { font-size: 12px; color: #627794; font-style: italic; }
-.child-item__type {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: #F5EEB3;
-  color: #8B6D00;
-  font-weight: 600;
-  white-space: nowrap;
-  font-style: normal;
-}
-.child-item__actions { display: flex; gap: 6px; }
-.child-item__btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 16px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: all 0.2s;
-}
-.child-item__btn:hover { background: #F5EEB3; }
-
-.empty-hint {
-  text-align: center;
-  color: #A0AEC0;
-  font-style: italic;
-  font-size: 13px;
-  padding: 18px;
-  margin: 0;
-  background: #FAFAF7;
-  border-radius: 8px;
-  border: 1px dashed #E8DCA0;
-}
-
-/* ===== CONTACT LIST ===== */
-.contact-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.contact-row {
-  display: grid;
-  grid-template-columns: 1fr 2fr auto;
-  gap: 8px;
-  align-items: center;
-}
-
-.contact-row input {
-  padding: 8px 12px;
-  border: 1.5px solid #E8DCA0;
-  border-radius: 6px;
-  font-size: 14px;
-  font-family: 'Inter', 'Roboto', sans-serif;
-  font-style: italic;
-  color: #2D3748;
-  line-height: 1.5;
-}
-
-.contact-row input:focus {
-  outline: none;
-  border-color: #C49504;
-  box-shadow: 0 0 0 2px rgba(196, 149, 4, 0.15);
-}
-
-.contact-row__remove {
-  background: transparent;
-  border: none;
-  font-size: 18px;
-  color: #C62828;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-}
-.contact-row__remove:hover { background: #FFEBEE; }
-
-/* ===== FOOTER ===== */
-.form-modal__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 24px;
-  border-top: 2px solid #E8DCA0;
-  background: #FAFAF7;
-  border-radius: 0 0 16px 16px;
-}
-
-.form-modal__footer-left,
-.form-modal__footer-right {
-  display: flex;
-  gap: 10px;
-}
-
-.form-modal__footer .btn { min-width: 100px; }
-
-/* ===== RESPONSIVE ===== */
-@media (max-width: 600px) {
-  .form-modal { padding: 10px; align-items: flex-start; }
-  .form-modal__content { max-height: 95vh; border-radius: 12px; }
-  .form-modal__header { padding: 12px 16px; }
-  .form-modal__title { font-size: 16px; }
-  .form-modal__body { padding: 16px; }
-  .form-modal__footer { padding: 12px 16px; flex-direction: column; gap: 10px; }
-  .form-modal__footer-left, .form-modal__footer-right { width: 100%; }
-  .form-modal__footer .btn { flex: 1; }
-  .avatar-upload { flex-direction: column; align-items: center; }
-  .avatar-preview { width: 100px; height: 133px; }
-  .contact-row { grid-template-columns: 1fr; gap: 6px; }
-  .contact-row__remove { justify-self: end; }
-  .spouse-row { grid-template-columns: 1fr; gap: 4px; }
-  .spouse-row__remove { justify-self: end; }
-}
+console.log('📝 Form.js v1.3 loaded - Delete + Link Notes + Created By');
