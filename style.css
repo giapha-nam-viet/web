@@ -610,3 +610,253 @@ body {
     flex-shrink: 0;
   }
 }
+
+/* ============================================
+   SẮP XẾP THỨ BẬC — Reorder Mode
+   ============================================ */
+
+/* Thanh điều khiển chế độ sắp xếp */
+.reorder-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #FFF8E1 0%, #FFECB3 100%);
+  border: 2px solid #C49504;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(196, 149, 4, 0.2);
+  flex-wrap: wrap;
+}
+
+.reorder-bar__info {
+  font-size: 14px;
+  color: #01285E;
+  font-weight: 500;
+  font-family: 'Be Vietnam Pro', 'Inter', sans-serif;
+}
+
+.reorder-bar__info strong {
+  color: #C49504;
+  font-weight: 700;
+}
+
+/* Khi bật chế độ sắp xếp — làm nổi bật các card */
+body.reorder-mode .person-mini {
+  border: 2px dashed #C49504;
+  background: #FFFBF0;
+}
+
+body.reorder-mode .person-mini:hover {
+  border-color: #8B6D00;
+  background: #FFF8E1;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(196, 149, 4, 0.25);
+}
+
+/* Nút ▲▼ trên mỗi card */
+.person-mini__reorder {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #E8DCA0;
+  justify-content: flex-end;
+}
+
+.reorder-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1.5px solid #C49504;
+  background: #FFFFFF;
+  color: #C49504;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  padding: 0;
+  line-height: 1;
+}
+
+.reorder-btn:hover {
+  background: #C49504;
+  color: #FFFFFF;
+  transform: scale(1.08);
+  box-shadow: 0 2px 8px rgba(196, 149, 4, 0.35);
+}
+
+.reorder-btn:active {
+  transform: scale(0.95);
+}
+
+/* Nút "🔀 Sắp xếp thứ bậc" */
+#reorderToggleBtn {
+  background: #FFF8E1;
+  color: #8B6D00;
+  border: 1.5px solid #C49504;
+  font-weight: 600;
+}
+
+#reorderToggleBtn:hover:not(:disabled) {
+  background: #FFECB3;
+  border-color: #8B6D00;
+}
+
+#reorderToggleBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Nút "✅ Xong" */
+#reorderDoneBtn {
+  background: #C49504;
+  color: #FFFFFF;
+  border: none;
+}
+
+#reorderDoneBtn:hover {
+  background: #8B6D00;
+}
+
+/* Mobile */
+@media (max-width: 640px) {
+  .reorder-bar {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  .reorder-bar__info {
+    font-size: 12px;
+  }
+  .reorder-btn {
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
+  }
+}
+
+/* ============================================
+   SẮP XẾP THỨ BẬC — Reorder Mode
+   ============================================ */
+
+.reorder-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #FFF8E1 0%, #FFECB3 100%);
+  border: 2px solid #C49504;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(196, 149, 4, 0.2);
+  flex-wrap: wrap;
+}
+
+.reorder-bar__info {
+  font-size: 14px;
+  color: #01285E;
+  font-weight: 500;
+  font-family: 'Be Vietnam Pro', 'Inter', sans-serif;
+}
+
+.reorder-bar__info strong {
+  color: #C49504;
+  font-weight: 700;
+}
+
+body.reorder-mode .person-mini {
+  border: 2px dashed #C49504;
+  background: #FFFBF0;
+}
+
+body.reorder-mode .person-mini:hover {
+  border-color: #8B6D00;
+  background: #FFF8E1;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(196, 149, 4, 0.25);
+}
+
+.person-mini__reorder {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #E8DCA0;
+  justify-content: flex-end;
+}
+
+.reorder-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1.5px solid #C49504;
+  background: #FFFFFF;
+  color: #C49504;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  padding: 0;
+  line-height: 1;
+}
+
+.reorder-btn:hover {
+  background: #C49504;
+  color: #FFFFFF;
+  transform: scale(1.08);
+  box-shadow: 0 2px 8px rgba(196, 149, 4, 0.35);
+}
+
+.reorder-btn:active {
+  transform: scale(0.95);
+}
+
+#reorderToggleBtn {
+  background: #FFF8E1;
+  color: #8B6D00;
+  border: 1.5px solid #C49504;
+  font-weight: 600;
+}
+
+#reorderToggleBtn:hover:not(:disabled) {
+  background: #FFECB3;
+  border-color: #8B6D00;
+}
+
+#reorderToggleBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+#reorderDoneBtn {
+  background: #C49504;
+  color: #FFFFFF;
+  border: none;
+}
+
+#reorderDoneBtn:hover {
+  background: #8B6D00;
+}
+
+@media (max-width: 640px) {
+  .reorder-bar {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  .reorder-bar__info {
+    font-size: 12px;
+  }
+  .reorder-btn {
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
+  }
+}

@@ -1,8 +1,9 @@
 /* ============================================
-   GIA PHẢ NAM VIỆT - APP.JS (v1.9)
+   GIA PHẢ NAM VIỆT - APP.JS (v2.0)
    - Sửa "Đời thứ nhất" (bỏ Thủy tổ)
    - Thêm 5 chủ đề Ngoại phả
    - Thêm 3 nút điều hướng ← → TRỞ VỀ
+   - Thêm chức năng SẮP XẾP THỨ BẬC (▲▼)
    ============================================ */
 
 const SUPABASE_URL = 'https://bqojzghxgdkrfyhnvpku.supabase.co';
@@ -27,6 +28,7 @@ let filteredPersons = [];
 let currentUser = null;
 let currentFilter = { generation: null, branch: null };
 let currentTopic = 'all';
+let isReorderMode = false;
 
 window.allPersons = allPersons;
 window.allNotes = allNotes;
@@ -44,6 +46,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupSubTabs();
   setupAddPerson();
   setupTopicFilters();
+  setupReorderMode();
   await checkAuthSession();
   await loadSettings();
   await loadAllData();
@@ -56,14 +59,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 function switchTab(tabId, push = true) {
   const tabs = document.querySelectorAll('.tab');
   const contents = document.querySelectorAll('.tab-content');
-  
   tabs.forEach(t => {
     t.classList.toggle('tab--active', t.dataset.tab === tabId);
   });
   contents.forEach(c => {
     c.style.display = c.id === 'tab-' + tabId ? 'block' : 'none';
   });
-  
   if (push) {
     history.pushState({ tab: tabId }, '', '#' + tabId);
   }
@@ -76,19 +77,15 @@ function setupTabs() {
       switchTab(tab.dataset.tab, true);
     });
   });
-  
-  // Đọc hash ban đầu
   const hash = window.location.hash.replace('#', '');
   if (hash) {
     const tab = document.querySelector('.tab[data-tab="' + hash + '"]');
     if (tab) {
-      // Không push lại, chỉ replace
       history.replaceState({ tab: hash }, '', '#' + hash);
       switchTab(hash, false);
       return;
     }
   }
-  // Mặc định trang chủ
   history.replaceState({ tab: 'trang-chu' }, '', '#trang-chu');
   switchTab('trang-chu', false);
 }
@@ -97,31 +94,21 @@ function setupTabs() {
    3 NÚT ĐIỀU HƯỚNG ← → TRỞ VỀ
    ============================================ */
 function setupNavigation() {
-  // Lắng nghe popstate (nút back/forward của trình duyệt)
   window.addEventListener('popstate', (e) => {
     const tabId = (e.state && e.state.tab) || 'trang-chu';
     switchTab(tabId, false);
   });
-  
-  // Nút ←
   const btnBack = document.getElementById('btnNavBack');
   if (btnBack) btnBack.addEventListener('click', () => history.back());
-  
-  // Nút →
   const btnForward = document.getElementById('btnNavForward');
   if (btnForward) btnForward.addEventListener('click', () => history.forward());
-  
-  // Nút TRỞ VỀ (về Trang chủ)
   const btnHome = document.getElementById('btnNavHome');
   if (btnHome) btnHome.addEventListener('click', () => switchTab('trang-chu', true));
 }
 
 function updateNavButtons() {
   const btnBack = document.getElementById('btnNavBack');
-  const btnForward = document.getElementById('btnNavForward');
-  // Không có cách chuẩn để biết có thể back/forward, nhưng có thể disable nút khi ở trang đầu
   if (btnBack) btnBack.disabled = (history.length <= 1);
-  // Forward luôn enable — trình duyệt tự bỏ qua nếu không có gì
 }
 
 /* ============================================
@@ -244,10 +231,8 @@ async function loadSettings() {
     if (error) throw error;
     const settings = {};
     (data || []).forEach(item => { settings[item.key] = item.value; });
-
     const loiTua = document.getElementById('loiTua');
     if (loiTua && settings.loi_tua) loiTua.innerHTML = formatText(settings.loi_tua);
-
     const huongDan = document.getElementById('huongDan');
     if (huongDan && settings.huong_dan_su_dung) huongDan.innerHTML = formatText(settings.huong_dan_su_dung);
   } catch (err) { console.error('Lỗi load settings:', err); }
@@ -271,7 +256,6 @@ async function loadAllData() {
       sbClient.from('marriages').select('*'),
       sbClient.from('parent_child').select('*')
     ]);
-
     if (results[0].error) throw results[0].error;
     if (results[1].error) throw results[1].error;
     if (results[2].error) throw results[2].error;
@@ -424,10 +408,21 @@ function createPersonMini(person) {
 
   const genStr = person.generation ? getGenerationLabel(person.generation) : '';
 
+  // Nút sắp xếp ▲▼ — chỉ hiện khi bật chế độ sắp xếp
+  let reorderHtml = '';
+  if (isReorderMode && person.sibling_order != null) {
+    reorderHtml =
+      '<div class="person-mini__reorder">' +
+        '<button class="reorder-btn" onclick="event.stopPropagation(); movePersonUp(\'' + person.id + '\')" title="Lên">▲</button>' +
+        '<button class="reorder-btn" onclick="event.stopPropagation(); movePersonDown(\'' + person.id + '\')" title="Xuống">▼</button>' +
+      '</div>';
+  }
+
   card.innerHTML =
     '<div class="' + nameClass + '">' + (person.full_name || '(chưa có tên)') + '</div>' +
     (dateStr ? '<div class="person-mini__dates">' + dateStr + '</div>' : '') +
-    (genStr ? '<div class="person-mini__generation">' + genStr + '</div>' : '');
+    (genStr ? '<div class="person-mini__generation">' + genStr + '</div>' : '') +
+    reorderHtml;
 
   return card;
 }
@@ -479,6 +474,92 @@ function setupAddPerson() {
       alert('⚠️ Form chưa được tải. Vui lòng thử lại sau.');
     }
   });
+}
+
+/* ============================================
+   SẮP XẾP THỨ BẬC (REORDER MODE)
+   ============================================ */
+function setupReorderMode() {
+  const toggleBtn = document.getElementById('reorderToggleBtn');
+  const doneBtn = document.getElementById('reorderDoneBtn');
+  if (toggleBtn) toggleBtn.addEventListener('click', toggleReorderMode);
+  if (doneBtn) doneBtn.addEventListener('click', () => {
+    toggleReorderMode();
+    alert('✅ Đã lưu thứ bậc mới!');
+  });
+}
+
+function toggleReorderMode() {
+  isReorderMode = !isReorderMode;
+  const bar = document.getElementById('reorderBar');
+  const btn = document.getElementById('reorderToggleBtn');
+  if (isReorderMode) {
+    if (bar) bar.style.display = 'flex';
+    if (btn) { btn.textContent = '🔀 Đang sắp xếp...'; btn.disabled = true; }
+    document.body.classList.add('reorder-mode');
+  } else {
+    if (bar) bar.style.display = 'none';
+    if (btn) { btn.textContent = '🔀 Sắp xếp thứ bậc'; btn.disabled = false; }
+    document.body.classList.remove('reorder-mode');
+  }
+  renderPersons();
+}
+
+async function swapSiblingOrder(personA, personB) {
+  if (!sbClient) return false;
+  const orderA = personA.sibling_order;
+  const orderB = personB.sibling_order;
+  try {
+    const tempOrder = -999;
+    await sbClient.from('persons').update({ sibling_order: tempOrder }).eq('id', personA.id);
+    await sbClient.from('persons').update({ sibling_order: orderA }).eq('id', personB.id);
+    await sbClient.from('persons').update({ sibling_order: orderB }).eq('id', personA.id);
+    personA.sibling_order = orderB;
+    personB.sibling_order = orderA;
+    return true;
+  } catch (err) {
+    console.error('Lỗi swap:', err);
+    alert('❌ Lỗi khi sắp xếp: ' + err.message);
+    return false;
+  }
+}
+
+async function movePersonUp(personId) {
+  if (!allPersons || allPersons.length === 0) return;
+  const person = allPersons.find(p => p.id === personId);
+  if (!person) return;
+  const sameGroup = allPersons
+    .filter(p =>
+      p.generation === person.generation &&
+      (p.branch || null) === (person.branch || null) &&
+      (p.role === 'Huyết thống' || !p.role) &&
+      p.sibling_order != null
+    )
+    .sort((a, b) => a.sibling_order - b.sibling_order);
+  const idx = sameGroup.findIndex(p => p.id === personId);
+  if (idx <= 0) { alert('⚠️ Đây đã là người đầu tiên trong nhóm'); return; }
+  const above = sameGroup[idx - 1];
+  const ok = await swapSiblingOrder(person, above);
+  if (ok) applyFilters();
+}
+
+async function movePersonDown(personId) {
+  if (!allPersons || allPersons.length === 0) return;
+  const person = allPersons.find(p => p.id === personId);
+  if (!person) return;
+  const sameGroup = allPersons
+    .filter(p =>
+      p.generation === person.generation &&
+      (p.branch || null) === (person.branch || null) &&
+      (p.role === 'Huyết thống' || !p.role) &&
+      p.sibling_order != null
+    )
+    .sort((a, b) => a.sibling_order - b.sibling_order);
+  const idx = sameGroup.findIndex(p => p.id === personId);
+  if (idx < 0 || idx >= sameGroup.length - 1) { alert('⚠️ Đây đã là người cuối cùng trong nhóm'); return; }
+  const below = sameGroup[idx + 1];
+  const ok = await swapSiblingOrder(person, below);
+  if (ok) applyFilters();
 }
 
 /* ============================================
@@ -576,4 +657,4 @@ function formatText(text) {
   return String(content).split('\n').map(line => '<p>' + line + '</p>').join('');
 }
 
-console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v1.9)', 'font-size: 20px; color: #01285E; font-weight: bold;');
+console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v2.0)', 'font-size: 20px; color: #01285E; font-weight: bold;');
