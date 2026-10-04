@@ -1,9 +1,11 @@
 /* ============================================
-   GIA PHẢ NAM VIỆT - APP.JS (v2.0)
+   GIA PHẢ NAM VIỆT - APP.JS (v3.0)
+   - Đăng nhập bằng MẬT KHẨU (thay magic link)
    - Sửa "Đời thứ nhất" (bỏ Thủy tổ)
    - Thêm 5 chủ đề Ngoại phả
    - Thêm 3 nút điều hướng ← → TRỞ VỀ
    - Thêm chức năng SẮP XẾP THỨ BẬC (▲▼)
+   - B2: Bộ đếm ký tự cho bio + conflictNote
    ============================================ */
 
 const SUPABASE_URL = 'https://bqojzghxgdkrfyhnvpku.supabase.co';
@@ -134,28 +136,95 @@ function setupSubTabs() {
 }
 
 /* ============================================
-   AUTH
+   AUTH — v3.0: ĐĂNG NHẬP BẰNG MẬT KHẨU
+   - Ô email + ô mật khẩu
+   - Nút "Đăng nhập" chính
+   - Nút phụ "Gửi link qua email" (magic link dự phòng)
    ============================================ */
 function setupAuth() {
   const loginBtn = document.getElementById('loginBtn');
   const logoutBtn = document.getElementById('logoutBtn');
   const loginModal = document.getElementById('loginModal');
   const closeLogin = document.getElementById('closeLogin');
-  const sendMagicLink = document.getElementById('sendMagicLink');
-  if (!loginBtn) return;
+  const emailInput = document.getElementById('loginEmail');
+  const submitBtn = document.getElementById('sendMagicLink');
+  const msg = document.getElementById('loginMessage');
 
-  loginBtn.addEventListener('click', () => { loginModal.style.display = 'flex'; });
-  closeLogin.addEventListener('click', () => {
-    loginModal.style.display = 'none';
-    document.getElementById('loginMessage').textContent = '';
+  if (!loginBtn || !submitBtn || !emailInput) {
+    console.warn('⚠️ Không tìm thấy element auth');
+    return;
+  }
+
+  // ---- 1. Thêm ô mật khẩu nếu chưa có ----
+  let passwordInput = document.getElementById('loginPassword');
+  if (!passwordInput) {
+    passwordInput = document.createElement('input');
+    passwordInput.type = 'password';
+    passwordInput.id = 'loginPassword';
+    passwordInput.placeholder = 'Mật khẩu';
+    passwordInput.className = emailInput.className || '';
+    passwordInput.style.cssText = emailInput.style.cssText || '';
+    passwordInput.style.marginTop = '8px';
+    emailInput.insertAdjacentElement('afterend', passwordInput);
+  }
+
+  // ---- 2. Đổi nhãn nút chính thành "Đăng nhập" ----
+  submitBtn.textContent = 'Đăng nhập';
+
+  // ---- 3. Tạo nút phụ "Gửi link qua email" (magic link dự phòng) ----
+  let magicBtn = document.getElementById('magicLinkBtn');
+  if (!magicBtn) {
+    magicBtn = document.createElement('button');
+    magicBtn.type = 'button';
+    magicBtn.id = 'magicLinkBtn';
+    magicBtn.className = submitBtn.className || 'btn btn--small btn--ghost';
+    magicBtn.textContent = 'Gửi link qua email';
+    magicBtn.style.cssText = 'margin-left:8px;';
+    submitBtn.insertAdjacentElement('afterend', magicBtn);
+  }
+
+  // ---- 4. Mở/đóng modal ----
+  loginBtn.addEventListener('click', () => {
+    loginModal.style.display = 'flex';
+    msg.textContent = '';
+    msg.className = 'modal__note';
+    setTimeout(() => emailInput.focus(), 100);
   });
 
-  sendMagicLink.addEventListener('click', async () => {
-    const email = document.getElementById('loginEmail').value.trim();
-    const msg = document.getElementById('loginMessage');
+  if (closeLogin) {
+    closeLogin.addEventListener('click', () => {
+      loginModal.style.display = 'none';
+      msg.textContent = '';
+      passwordInput.value = '';
+    });
+  }
+
+  // ---- 5. Enter để đăng nhập ----
+  const handleEnter = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      submitBtn.click();
+    }
+  };
+  emailInput.addEventListener('keydown', handleEnter);
+  passwordInput.addEventListener('keydown', handleEnter);
+
+  // ---- 6. Nút ĐĂNG NHẬP (bằng mật khẩu) ----
+  submitBtn.addEventListener('click', async () => {
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+
+    msg.className = 'modal__note';
+
     if (!email) {
       msg.textContent = '⚠️ Vui lòng nhập email';
       msg.className = 'modal__note modal__note--error';
+      return;
+    }
+    if (!password) {
+      msg.textContent = '⚠️ Vui lòng nhập mật khẩu';
+      msg.className = 'modal__note modal__note--error';
+      passwordInput.focus();
       return;
     }
     if (!sbClient) {
@@ -163,26 +232,80 @@ function setupAuth() {
       msg.className = 'modal__note modal__note--error';
       return;
     }
-    sendMagicLink.disabled = true;
-    sendMagicLink.textContent = 'Đang gửi...';
+
+    submitBtn.disabled = true;
+    const oldText = submitBtn.textContent;
+    submitBtn.textContent = 'Đang đăng nhập...';
+
     try {
-      const { error } = await sbClient.auth.signInWithOtp({
+      const { data, error } = await sbClient.auth.signInWithPassword({
         email: email,
-        options: { emailRedirectTo: window.location.origin + window.location.pathname }
+        password: password
       });
       if (error) throw error;
-      msg.textContent = '✅ Đã gửi link đăng nhập! Kiểm tra email: ' + email;
+
+      console.log('✅ Đăng nhập thành công:', data.user?.email);
+      msg.textContent = '✅ Đăng nhập thành công!';
       msg.className = 'modal__note modal__note--success';
-      document.getElementById('loginEmail').value = '';
+      passwordInput.value = '';
+
+      setTimeout(() => {
+        loginModal.style.display = 'none';
+        msg.textContent = '';
+      }, 700);
+
     } catch (err) {
-      msg.textContent = '❌ Lỗi: ' + err.message;
+      console.error('Login error:', err);
+      let errMsg = err.message || 'Lỗi không xác định';
+      if (errMsg.includes('Invalid login credentials')) {
+        errMsg = 'Email hoặc mật khẩu không đúng';
+      } else if (errMsg.includes('Email not confirmed')) {
+        errMsg = 'Email chưa xác nhận. Vào Supabase → Authentication → Users → Confirm email';
+      }
+      msg.textContent = '❌ ' + errMsg;
       msg.className = 'modal__note modal__note--error';
     } finally {
-      sendMagicLink.disabled = false;
-      sendMagicLink.textContent = 'Gửi link đăng nhập';
+      submitBtn.disabled = false;
+      submitBtn.textContent = oldText;
     }
   });
 
+  // ---- 7. Nút phụ "Gửi link qua email" (magic link dự phòng) ----
+  magicBtn.addEventListener('click', async () => {
+    const email = emailInput.value.trim();
+    msg.className = 'modal__note';
+
+    if (!email) {
+      msg.textContent = '⚠️ Vui lòng nhập email để nhận link';
+      msg.className = 'modal__note modal__note--error';
+      return;
+    }
+    if (!sbClient) return;
+
+    magicBtn.disabled = true;
+    magicBtn.textContent = 'Đang gửi...';
+
+    try {
+      const { error } = await sbClient.auth.signInWithOtp({
+        email: email,
+        options: {
+          emailRedirectTo: window.location.origin + window.location.pathname
+        }
+      });
+      if (error) throw error;
+
+      msg.textContent = '✅ Đã gửi link! Kiểm tra email: ' + email;
+      msg.className = 'modal__note modal__note--success';
+    } catch (err) {
+      msg.textContent = '❌ ' + (err.message || 'Lỗi gửi link');
+      msg.className = 'modal__note modal__note--error';
+    } finally {
+      magicBtn.disabled = false;
+      magicBtn.textContent = 'Gửi link qua email';
+    }
+  });
+
+  // ---- 8. Đăng xuất ----
   logoutBtn.addEventListener('click', async () => {
     if (!confirm('Bạn chắc chắn muốn đăng xuất?')) return;
     if (sbClient) await sbClient.auth.signOut();
@@ -213,7 +336,8 @@ function updateAuthUI(user) {
     status.textContent = '👤 ' + (user.email || 'Đã đăng nhập');
     loginBtn.style.display = 'none';
     logoutBtn.style.display = 'inline-flex';
-    document.getElementById('loginModal').style.display = 'none';
+    const modal = document.getElementById('loginModal');
+    if (modal) modal.style.display = 'none';
   } else {
     status.textContent = 'Chưa đăng nhập';
     loginBtn.style.display = 'inline-flex';
@@ -657,7 +781,7 @@ function formatText(text) {
   return String(content).split('\n').map(line => '<p>' + line + '</p>').join('');
 }
 
-console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v2.0)', 'font-size: 20px; color: #01285E; font-weight: bold;');
+console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v3.0)', 'font-size: 20px; color: #01285E; font-weight: bold;');
 
 /* ============================================
    BỘ ĐẾM KÝ TỰ CHO TEXTAREA (B2)
@@ -666,12 +790,12 @@ function updateCharCount(fieldId, maxChars) {
   const field = document.getElementById(fieldId);
   const counter = document.getElementById(fieldId + '-counter');
   if (!field || !counter) return;
-  
+
   const currentLen = field.value.length;
   counter.textContent = currentLen + '/' + maxChars + ' ký tự';
-  
+
   counter.classList.remove('char-counter--warning', 'char-counter--danger');
-  
+
   const percent = (currentLen / maxChars) * 100;
   if (percent >= 100) {
     counter.classList.add('char-counter--danger');
