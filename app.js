@@ -252,7 +252,7 @@ async function loadAllData() {
 
   try {
     const results = await Promise.all([
-      sbClient.from('persons').select('*').order('generation', { ascending: true }).order('sibling_order', { ascending: true, nullsFirst: false }),
+      sbClient.from('persons').select('id, full_name, gender, generation, branch, sibling_order, birth_year, death_year, role, role_type, is_unknown, is_deleted, created_at').order('generation', { ascending: true }).order('sibling_order', { ascending: true, nullsFirst: false }),rst: false }),
       sbClient.from('marriages').select('*'),
       sbClient.from('parent_child').select('*')
     ]);
