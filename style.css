@@ -860,3 +860,26 @@ body.reorder-mode .person-mini:hover {
     font-size: 12px;
   }
 }
+
+/* ============================================
+   BỘ ĐẾM KÝ TỰ CHO TEXTAREA (B2)
+   ============================================ */
+.char-counter {
+  font-size: 12px;
+  color: #627794;
+  text-align: right;
+  margin-top: 4px;
+  font-style: italic;
+  font-family: 'Inter', 'Be Vietnam Pro', sans-serif;
+  transition: color 0.2s ease;
+}
+
+.char-counter--warning {
+  color: #C49504;
+  font-weight: 600;
+}
+
+.char-counter--danger {
+  color: #C62828;
+  font-weight: 700;
+}

@@ -819,9 +819,14 @@ async function loadPersonForEdit(personId) {
       }
     }
 
-    // 8. Con cái — chỉ hiển thị thông báo (không load vào tempChildrenList)
+      // 8. Con cái — chỉ hiển thị thông báo (không load vào tempChildrenList)
     tempChildrenList = [];
     renderTempChildren();
+
+    // 9. Cập nhật bộ đếm ký tự
+   if (typeof refreshCharCounters === 'function') {
+      refreshCharCounters();
+    }
 
   } catch (err) {
     console.error('Lỗi load person for edit:', err);
@@ -890,7 +895,7 @@ async function savePerson() {
         .from('persons').insert(personData).select('id').single();
       if (error) throw error;
       personId = inserted.id;
-      currentEditingPersonId = personId;
+      currentEditingPersonId = personId;F
     }
 
     // 3. Xử lý quan hệ Bố/Mẹ
@@ -917,7 +922,7 @@ async function savePerson() {
 
     // Thêm hôn nhân mới
     const personGender = document.getElementById('gender').value;
-    for (const sp of spouses) {
+F    for (const sp of spouses) {
       await createMarriageLink(personId, sp.personId, personGender, sp.order);
     }
 

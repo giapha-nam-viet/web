@@ -658,3 +658,31 @@ function formatText(text) {
 }
 
 console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v2.0)', 'font-size: 20px; color: #01285E; font-weight: bold;');
+
+/* ============================================
+   BỘ ĐẾM KÝ TỰ CHO TEXTAREA (B2)
+   ============================================ */
+function updateCharCount(fieldId, maxChars) {
+  const field = document.getElementById(fieldId);
+  const counter = document.getElementById(fieldId + '-counter');
+  if (!field || !counter) return;
+  
+  const currentLen = field.value.length;
+  counter.textContent = currentLen + '/' + maxChars + ' ký tự';
+  
+  counter.classList.remove('char-counter--warning', 'char-counter--danger');
+  
+  const percent = (currentLen / maxChars) * 100;
+  if (percent >= 100) {
+    counter.classList.add('char-counter--danger');
+  } else if (percent >= 90) {
+    counter.classList.add('char-counter--warning');
+  }
+}
+
+function refreshCharCounters() {
+  const bioField = document.getElementById('bio');
+  const conflictField = document.getElementById('conflictNote');
+  if (bioField) updateCharCount('bio', 2000);
+  if (conflictField) updateCharCount('conflictNote', 1000);
+}

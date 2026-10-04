@@ -321,11 +321,14 @@
         <h3 class="form-section__title">TIỂU SỬ</h3>
         <div class="form-group">
           <label class="form-label">Ghi chú xung đột thông tin (nếu có)</label>
-          <textarea class="form-input form-input--textarea" id="conflictNote" placeholder="VD: Có tài liệu ghi tên khác..." rows="2"></textarea>
+                            <textarea class="form-input form-input--textarea" id="conflictNote" placeholder="VD: Có tài liệu ghi tên khác..." rows="2" maxlength="1000" oninput="updateCharCount('conflictNote', 1000)"></textarea>
+              <div class="char-counter" id="conflictNote-counter">0/1000 ký tự</div>
         </div>
-        <div class="form-group">
+                <div class="form-group">
           <label class="form-label">Tiểu sử / Ghi chú</label>
-          <textarea class="form-input form-input--textarea" id="bio" placeholder="Nhập tiểu sử, thông tin bổ sung..." rows="5"></textarea>
+          <textarea class="form-input form-input--textarea" id="bio" placeholder="Nhập tiểu sử, thông tin bổ sung..." rows="5" maxlength="2000" oninput="updateCharCount('bio', 2000)"></textarea>
+          <div class="char-counter" id="bio-counter">0/2000 ký tự</div>
+        </div>
         </div>
       </div>
 
