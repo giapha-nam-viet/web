@@ -91,20 +91,21 @@
     
     <div class="card">
       <div class="toolbar">
-  <input type="text" id="searchInput" placeholder="🔍 Tìm tên (không dấu cũng được)..." class="search-input">
-  <button class="btn btn--ghost" id="reorderToggleBtn">🔀 Sắp xếp thứ bậc</button>
-  <button class="btn btn--primary" id="addPersonBtn">+ Thêm cá nhân</button>
-</div>
+        <input type="text" id="searchInput" placeholder="🔍 Tìm tên (không dấu cũng được)..." class="search-input">
+        <button class="btn btn--ghost" id="reorderToggleBtn">🔀 Sắp xếp thứ bậc</button>
+        <button class="btn btn--primary" id="addPersonBtn">+ Thêm cá nhân</button>
+      </div>
 
-<!-- Thanh điều khiển chế độ sắp xếp -->
-<div id="reorderBar" class="reorder-bar" style="display:none">
-  <span class="reorder-bar__info">
-    🔀 <strong>Chế độ sắp xếp</strong> — Bấm ▲▼ để đổi thứ tự trong cùng Đời + Chi
-  </span>
-  <button class="btn btn--primary btn--small" id="reorderDoneBtn">✅ Xong</button>
-</div>
- 
-<div class="person-grid" id="personGrid"><p class="empty-state">Đang tải dữ liệu...</p></div>   </div>
+      <!-- Thanh điều khiển chế độ sắp xếp -->
+      <div id="reorderBar" class="reorder-bar" style="display:none">
+        <span class="reorder-bar__info">
+          🔀 <strong>Chế độ sắp xếp</strong> — Bấm ▲▼ để đổi thứ tự trong cùng Đời + Chi
+        </span>
+        <button class="btn btn--primary btn--small" id="reorderDoneBtn">✅ Xong</button>
+      </div>
+      
+      <div class="person-grid" id="personGrid"><p class="empty-state">Đang tải dữ liệu...</p></div>
+    </div>
   </section>
 
   <section class="tab-content" id="tab-pha-do" style="display:none">
@@ -168,18 +169,14 @@
       <button type="button" class="form-modal__close" onclick="closePersonForm()">×</button>
     </div>
     
-    <!-- ============================================
-         TẦNG 1: XEM THÔNG TIN
-         ============================================ -->
+    <!-- TẦNG 1: XEM THÔNG TIN -->
     <div class="form-modal__body" id="personViewBody">
       <div class="person-view" id="personViewContent">
         <p class="person-view__empty">Đang tải...</p>
       </div>
     </div>
     
-    <!-- ============================================
-         TẦNG 2: SỬA THÔNG TIN
-         ============================================ -->
+    <!-- TẦNG 2: SỬA THÔNG TIN -->
     <div class="form-modal__body" id="personEditBody" style="display:none">
       
       <div class="form-section">
@@ -321,14 +318,13 @@
         <h3 class="form-section__title">TIỂU SỬ</h3>
         <div class="form-group">
           <label class="form-label">Ghi chú xung đột thông tin (nếu có)</label>
-                            <textarea class="form-input form-input--textarea" id="conflictNote" placeholder="VD: Có tài liệu ghi tên khác..." rows="2" maxlength="1000" oninput="updateCharCount('conflictNote', 1000)"></textarea>
-              <div class="char-counter" id="conflictNote-counter">0/1000 ký tự</div>
+          <textarea class="form-input form-input--textarea" id="conflictNote" placeholder="VD: Có tài liệu ghi tên khác..." rows="2" maxlength="1000" oninput="updateCharCount('conflictNote', 1000)"></textarea>
+          <div class="char-counter" id="conflictNote-counter">0/1000 ký tự</div>
         </div>
-                <div class="form-group">
+        <div class="form-group">
           <label class="form-label">Tiểu sử / Ghi chú</label>
           <textarea class="form-input form-input--textarea" id="bio" placeholder="Nhập tiểu sử, thông tin bổ sung..." rows="5" maxlength="2000" oninput="updateCharCount('bio', 2000)"></textarea>
           <div class="char-counter" id="bio-counter">0/2000 ký tự</div>
-        </div>
         </div>
       </div>
 
@@ -353,14 +349,19 @@
           </div>
         </div>
       </div>
+
     </div>
+    <!-- END personEditBody -->
 
     <!-- FOOTER - NÚT TÁC VỤ -->
     <div class="form-modal__footer" id="personFormFooter">
       <!-- Sẽ được điền động bằng JS tùy tầng -->
     </div>
+
   </div>
+  <!-- END .form-modal__content -->
 </div>
+<!-- END #personFormModal -->
 
 <!-- MODAL CROP ẢNH -->
 <div class="form-modal" id="cropModal" onclick="if(event.target===this) closeCropModal()">
