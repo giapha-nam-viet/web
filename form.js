@@ -922,7 +922,7 @@ async function savePerson() {
 
     // Thêm hôn nhân mới
     const personGender = document.getElementById('gender').value;
-F    for (const sp of spouses) {
+    for (const sp of spouses) {
       await createMarriageLink(personId, sp.personId, personGender, sp.order);
     }
 
