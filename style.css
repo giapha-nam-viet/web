@@ -883,3 +883,19 @@ body.reorder-mode .person-mini:hover {
   color: #C62828;
   font-weight: 700;
 }
+/* Fix footer form hiển thị đúng */
+.form-modal__footer {
+  position: relative !important;
+  left: auto !important;
+  right: auto !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  padding: 12px 22px !important;
+  border-top: 2px solid #B8CCE8 !important;
+  background: #E8F0FA !important;
+  border-radius: 0 0 12px 12px !important;
+  flex-wrap: wrap !important;
+  gap: 10px !important;
+}
