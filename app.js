@@ -1,9 +1,10 @@
 /* ============================================
-   GIA PHẢ NAM VIỆT - APP.JS (v3.4)
+   GIA PHẢ NAM VIỆT - APP.JS (v3.4.1)
    - v3.0: Đăng nhập bằng mật khẩu
    - v3.3: Phase A — viết hoa + đậm gạch chân
    - v3.4: Tự động nhận diện huyết thống vs phối ngẫu
-     dựa vào role + role_type + marriages
+   - v3.4.1: FIX — không ẩn người có role_type "Dâu/Rể"
+     nhưng chưa có marriage (tránh mất khỏi danh sách)
    ============================================ */
 
 const SUPABASE_URL = 'https://bqojzghxgdkrfyhnvpku.supabase.co';
@@ -415,72 +416,86 @@ function getGenerationLabel(gen) {
 }
 
 /* ============================================
-   v3.4 — XÁC ĐỊNH HUYẾT THỐNG HAY PHỐI NGẪU
+   v3.4.1 — XÁC ĐỊNH HUYẾT THỐNG HAY PHỐI NGẪU
+   
+   Nguyên tắc AN TOÀN:
+   - CHỈ trả về false (phối ngẫu) khi CHẮC CHẮN
+   - Mọi trường hợp không rõ → trả về true (hiện cột trái)
+   - Không bao giờ để người bị ẩn khỏi danh sách
    
    Quy tắc:
-   1. role = 'Huyết thống' → huyết thống
-   2. role_type chứa 'Dâu', 'Rể', 'Vợ', 'Chồng' → phối ngẫu
-   3. role có giá trị khác 'Huyết thống' → phối ngẫu
-   4. role + role_type đều rỗng → dựa vào marriages + parent_child
+   1. role = 'Huyết thống' → true
+   2. role_type có 'Dâu/Rể/Vợ/Chồng' + CÓ marriage → false
+   3. role_type có 'Dâu/Rể/Vợ/Chồng' + KHÔNG marriage → true (hiện tạm)
+   4. role khác 'Huyết thống' → false
+   5. role rỗng → tự suy đoán (fallback true)
    ============================================ */
 function isHuyetThong(person) {
+  if (!person) return true;
+
   const role = (person.role || '').trim();
   const roleType = (person.role_type || '').trim();
 
-  // 1. Role rõ ràng
+  // 1. Role Huyết thống rõ ràng
   if (role === 'Huyết thống') return true;
 
-  // 2. role_type có từ khoá phối ngẫu
-  const phoiNgauKeywords = ['Dâu', 'Rể', 'Vợ', 'Chồng', 'Phối ngẫu'];
-  const roleTypeLower = roleType.toLowerCase();
-  for (const kw of phoiNgauKeywords) {
-    if (roleTypeLower.includes(kw.toLowerCase())) return false;
-  }
-
-  // 3. role có giá trị khác (không phải Huyết thống) → phối ngẫu
-  if (role && role !== 'Huyết thống') return false;
-
-  // 4. Role rỗng → tự suy đoán
+  // Tìm marriage của người này
   const marriage = allMarriages.find(m =>
     m.husband_id === person.id || m.wife_id === person.id
   );
 
-  if (!marriage) {
-    // Không có vợ/chồng → mặc định huyết thống
+  // 2 & 3. role_type có từ khoá phối ngẫu
+  const phoiNgauKeywords = ['Dâu', 'Rể', 'Vợ', 'Chồng', 'Phối ngẫu'];
+  const roleTypeLower = roleType.toLowerCase();
+  const isPhoiNgauType = phoiNgauKeywords.some(kw =>
+    roleTypeLower.includes(kw.toLowerCase())
+  );
+
+  if (isPhoiNgauType) {
+    // Có marriage → thực sự là phối ngẫu → cột phải
+    if (marriage) return false;
+    // KHÔNG có marriage → chưa liên kết, hiện tạm ở cột trái
+    // để user có thể sửa hoặc xóa
     return true;
   }
+
+  // 4. role có giá trị khác Huyết thống → phối ngẫu
+  if (role && role !== 'Huyết thống') return false;
+
+  // 5. Role rỗng → suy đoán
+  if (!marriage) return true; // không có vợ/chồng → huyết thống
 
   const otherId = marriage.husband_id === person.id
     ? marriage.wife_id
     : marriage.husband_id;
   const other = allPersons.find(p => p.id === otherId);
 
-  if (!other) return true;
+  if (!other) return true; // không tìm thấy người kia → an toàn
 
   const otherRole = (other.role || '').trim();
   const otherRoleType = (other.role_type || '').trim();
 
-  // 4a. Người kia có role Huyết thống rõ ràng → mình là phối ngẫu
+  // 5a. Người kia có role Huyết thống rõ ràng → mình là phối ngẫu
   if (otherRole === 'Huyết thống') return false;
 
-  // 4b. Người kia có role_type phối ngẫu → mình là huyết thống
+  // 5b. Người kia có role_type phối ngẫu → mình là huyết thống
   const otherRoleTypeLower = otherRoleType.toLowerCase();
   for (const kw of phoiNgauKeywords) {
     if (otherRoleTypeLower.includes(kw.toLowerCase())) return true;
   }
 
-  // 4c. Xem ai có parent_child (làm con) → người đó huyết thống
+  // 5c. Ai có parent (làm con) → người đó huyết thống
   const selfHasParent = allParentChild.some(pc => pc.child_id === person.id);
   const otherHasParent = allParentChild.some(pc => pc.child_id === other.id);
 
   if (selfHasParent) return true;
   if (otherHasParent) return false;
 
-  // 4d. Cả 2 đời đầu, không parent → Nam huyết thống, Nữ phối ngẫu
+  // 5d. Cả 2 đời đầu, không parent → Nam huyết thống
   if (person.gender === 'Nam' && other.gender === 'Nữ') return true;
   if (person.gender === 'Nữ' && other.gender === 'Nam') return false;
 
-  // 4e. Mặc định
+  // 5e. Fallback an toàn — mặc định hiện cột trái
   return true;
 }
 
@@ -838,7 +853,7 @@ function formatText(text) {
   return String(content).split('\n').map(line => '<p>' + line + '</p>').join('');
 }
 
-console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v3.4)', 'font-size: 20px; color: #01285E; font-weight: bold;');
+console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v3.4.1)', 'font-size: 20px; color: #01285E; font-weight: bold;');
 
 /* ============================================
    BỘ ĐẾM KÝ TỰ CHO TEXTAREA
