@@ -1,8 +1,10 @@
 /* ============================================
-   FORM LOGIC - GIA PHẢ NAM VIỆT (v2.3)
+   FORM LOGIC - GIA PHẢ NAM VIỆT (v3.2)
    - 2 tầng: Xem + Sửa
    - Nút "Đến Phả đồ"
    - B3: Upload avatar lên Supabase Storage (bucket: avatars)
+   - v3.1: Nút XOÁ xoá sạch (không chặn dù có con)
+   - v3.2: Chặn trùng khi thêm mới (kiểm tra tên + năm sinh)
    ============================================ */
 
 let currentEditingPersonId = null;
@@ -950,6 +952,45 @@ async function savePerson() {
       contact_info: getContactInfo()
     };
 
+    // ============================================
+    // v3.2 — KIỂM TRA TRÙNG TRƯỚC KHI THÊM MỚI
+    // (chỉ check khi thêm mới, không check khi sửa)
+    // ============================================
+    if (!currentEditingPersonId) {
+      try {
+        let query = window.sbClient
+          .from('persons')
+          .select('id, full_name, birth_year, generation')
+          .eq('full_name', fullName);
+
+        // Nếu có năm sinh → check thêm
+        if (personData.birth_year) {
+          query = query.eq('birth_year', personData.birth_year);
+        }
+
+        const { data: duplicates } = await query;
+
+        if (duplicates && duplicates.length > 0) {
+          const dup = duplicates[0];
+          const msg =
+            '⚠️ ĐÃ CÓ NGƯỜI TRÙNG:\n\n' +
+            '• Họ tên: ' + dup.full_name + '\n' +
+            '• Năm sinh: ' + (dup.birth_year || '(không rõ)') + '\n' +
+            '• Đời: ' + (dup.generation || '?') + '\n\n' +
+            'Vẫn muốn thêm "' + fullName + '" làm người MỚI không?\n' +
+            '(Nếu đây là cùng 1 người → bấm Cancel để về sửa người cũ)';
+
+          if (!confirm(msg)) {
+            saveBtns.forEach(b => { b.disabled = false; b.textContent = '💾 LƯU'; });
+            return;
+          }
+        }
+      } catch (checkErr) {
+        console.warn('Check trùng lỗi (bỏ qua):', checkErr);
+      }
+    }
+    // ============================================
+
     // B3: tempAvatarData giờ là URL ngắn (không còn base64)
     if (tempAvatarData) personData.avatar_url = tempAvatarData;
 
@@ -1044,7 +1085,11 @@ async function savePerson() {
 }
 
 /* ============================================
-   15. XÓA NGƯỜI (DELETE PERSON)
+   15. XÓA NGƯỜI — v3.1: XOÁ SẠCH
+   - Không chặn dù có con
+   - Xoá hết liên kết: parent_child, marriages, person_notes
+   - Xoá file avatar trên Storage
+   - Xoá record trong persons
    ============================================ */
 async function deletePerson() {
   if (!currentEditingPersonId) {
@@ -1056,46 +1101,47 @@ async function deletePerson() {
     return;
   }
 
+  const name = tempOriginalPerson ? tempOriginalPerson.full_name : 'người này';
+
+  const ok = confirm(
+    '🗑️ XOÁ VĨNH VIỄN: "' + name + '"\n\n' +
+    'Sẽ xoá:\n' +
+    '• Hồ sơ cá nhân\n' +
+    '• Tất cả liên kết cha-mẹ-con\n' +
+    '• Tất cả liên kết vợ-chồng\n' +
+    '• Tất cả liên kết bài viết\n' +
+    '• Ảnh đại diện\n\n' +
+    'Không thể hoàn tác. Tiếp tục?'
+  );
+  if (!ok) return;
+
+  const personId = currentEditingPersonId;
+
   try {
-    const { data: children } = await window.sbClient
-      .from('parent_child').select('child_id').eq('parent_id', currentEditingPersonId);
+    const avatarPath = urlToStoragePath(
+      tempOriginalPerson ? tempOriginalPerson.avatar_url : null
+    );
 
-    if (children && children.length > 0) {
-      alert('⚠️ KHÔNG THỂ XÓA\n\nNgười này đang có ' + children.length +
-            ' người con trong gia phả.\n\nVui lòng xóa/xử lý các liên kết con cái trước.');
-      return;
-    }
-
-    const name = tempOriginalPerson ? tempOriginalPerson.full_name : 'người này';
-    if (!confirm('🗑️ XÓA "' + name + '"?\n\nHành động này không thể hoàn tác!')) return;
-    if (!confirm('⚠️ XÁC NHẬN LẦN 2\n\nBạn có CHẮC CHẮN muốn xóa "' + name + '"?')) return;
-
-    // B3: lấy path avatar trước khi xoá person
-    const avatarPath = urlToStoragePath(tempOriginalPerson ? tempOriginalPerson.avatar_url : null);
-
-    // Xoá liên kết
     await window.sbClient.from('parent_child').delete()
-      .or('parent_id.eq.' + currentEditingPersonId + ',child_id.eq.' + currentEditingPersonId);
+      .or('parent_id.eq.' + personId + ',child_id.eq.' + personId);
 
     await window.sbClient.from('marriages').delete()
-      .or('husband_id.eq.' + currentEditingPersonId + ',wife_id.eq.' + currentEditingPersonId);
+      .or('husband_id.eq.' + personId + ',wife_id.eq.' + personId);
 
     await window.sbClient.from('person_notes').delete()
-      .eq('person_id', currentEditingPersonId);
+      .eq('person_id', personId);
 
-    // Xoá người
     const { error } = await window.sbClient
-      .from('persons').delete().eq('id', currentEditingPersonId);
+      .from('persons').delete().eq('id', personId);
     if (error) throw error;
 
-    // B3: xoá file avatar trên Storage (best-effort)
     if (avatarPath) {
       window.sbClient.storage.from('avatars').remove([avatarPath])
-        .then(({ error }) => { if (error) console.warn('Không xoá được avatar:', error); })
-        .catch(err => console.warn('Xoá avatar lỗi:', err));
+        .then(({ error }) => { if (error) console.warn('Avatar xoá lỗi:', error); })
+        .catch(err => console.warn(err));
     }
 
-    alert('✅ Đã xóa "' + name + '"');
+    alert('✅ Đã xoá "' + name + '"');
 
     if (typeof window.loadAllPersons === 'function') {
       await window.loadAllPersons();
@@ -1244,4 +1290,4 @@ async function createChildWithAutoCreate(child, parentId, parentGender) {
    KẾT THÚC
    ============================================ */
 
-console.log('📝 Form.js v2.3 — B3 Storage upload đã sẵn sàng');
+console.log('📝 Form.js v3.2 — Xoá sạch + Chặn trùng đã sẵn sàng');
