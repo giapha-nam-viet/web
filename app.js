@@ -1,10 +1,10 @@
 /* ============================================
-   GIA PHẢ NAM VIỆT - APP.JS (v3.4.1)
+   GIA PHẢ NAM VIỆT - APP.JS (v3.4.2)
    - v3.0: Đăng nhập bằng mật khẩu
    - v3.3: Phase A — viết hoa + đậm gạch chân
    - v3.4: Tự động nhận diện huyết thống vs phối ngẫu
-   - v3.4.1: FIX — không ẩn người có role_type "Dâu/Rể"
-     nhưng chưa có marriage (tránh mất khỏi danh sách)
+   - v3.4.1: FIX — không ẩn người chưa có marriage
+   - v3.4.2: FIX sort ổn định + badge "Chưa liên kết"
    ============================================ */
 
 const SUPABASE_URL = 'https://bqojzghxgdkrfyhnvpku.supabase.co';
@@ -416,19 +416,12 @@ function getGenerationLabel(gen) {
 }
 
 /* ============================================
-   v3.4.1 — XÁC ĐỊNH HUYẾT THỐNG HAY PHỐI NGẪU
+   v3.4.2 — XÁC ĐỊNH HUYẾT THỐNG HAY PHỐI NGẪU
    
    Nguyên tắc AN TOÀN:
    - CHỈ trả về false (phối ngẫu) khi CHẮC CHẮN
    - Mọi trường hợp không rõ → trả về true (hiện cột trái)
    - Không bao giờ để người bị ẩn khỏi danh sách
-   
-   Quy tắc:
-   1. role = 'Huyết thống' → true
-   2. role_type có 'Dâu/Rể/Vợ/Chồng' + CÓ marriage → false
-   3. role_type có 'Dâu/Rể/Vợ/Chồng' + KHÔNG marriage → true (hiện tạm)
-   4. role khác 'Huyết thống' → false
-   5. role rỗng → tự suy đoán (fallback true)
    ============================================ */
 function isHuyetThong(person) {
   if (!person) return true;
@@ -452,51 +445,63 @@ function isHuyetThong(person) {
   );
 
   if (isPhoiNgauType) {
-    // Có marriage → thực sự là phối ngẫu → cột phải
-    if (marriage) return false;
-    // KHÔNG có marriage → chưa liên kết, hiện tạm ở cột trái
-    // để user có thể sửa hoặc xóa
-    return true;
+    if (marriage) return false; // có marriage → cột phải
+    return true;                 // chưa liên kết → tạm hiện cột trái + badge
   }
 
   // 4. role có giá trị khác Huyết thống → phối ngẫu
   if (role && role !== 'Huyết thống') return false;
 
   // 5. Role rỗng → suy đoán
-  if (!marriage) return true; // không có vợ/chồng → huyết thống
+  if (!marriage) return true;
 
   const otherId = marriage.husband_id === person.id
     ? marriage.wife_id
     : marriage.husband_id;
   const other = allPersons.find(p => p.id === otherId);
 
-  if (!other) return true; // không tìm thấy người kia → an toàn
+  if (!other) return true;
 
   const otherRole = (other.role || '').trim();
   const otherRoleType = (other.role_type || '').trim();
 
-  // 5a. Người kia có role Huyết thống rõ ràng → mình là phối ngẫu
   if (otherRole === 'Huyết thống') return false;
 
-  // 5b. Người kia có role_type phối ngẫu → mình là huyết thống
   const otherRoleTypeLower = otherRoleType.toLowerCase();
   for (const kw of phoiNgauKeywords) {
     if (otherRoleTypeLower.includes(kw.toLowerCase())) return true;
   }
 
-  // 5c. Ai có parent (làm con) → người đó huyết thống
   const selfHasParent = allParentChild.some(pc => pc.child_id === person.id);
   const otherHasParent = allParentChild.some(pc => pc.child_id === other.id);
 
   if (selfHasParent) return true;
   if (otherHasParent) return false;
 
-  // 5d. Cả 2 đời đầu, không parent → Nam huyết thống
   if (person.gender === 'Nam' && other.gender === 'Nữ') return true;
   if (person.gender === 'Nữ' && other.gender === 'Nam') return false;
 
-  // 5e. Fallback an toàn — mặc định hiện cột trái
   return true;
+}
+
+/* ============================================
+   v3.4.2 — KIỂM TRA NGƯỜI LÀ PHỐI NGẪU CHƯA LIÊN KẾT
+   (có role_type Dâu/Rể nhưng chưa có marriage)
+   ============================================ */
+function isUnlinkedSpouse(person) {
+  if (!person) return false;
+
+  const roleType = (person.role_type || '').toLowerCase();
+  const looksLikeSpouse = ['dâu', 'rể', 'vợ', 'chồng', 'phối ngẫu'].some(kw =>
+    roleType.includes(kw)
+  );
+  if (!looksLikeSpouse) return false;
+
+  const hasMarriage = allMarriages.some(m =>
+    m.husband_id === person.id || m.wife_id === person.id
+  );
+
+  return !hasMarriage;
 }
 
 /* ============================================
@@ -523,10 +528,21 @@ function renderPersons() {
   sortedGens.forEach(gen => {
     const people = byGeneration[gen];
     const huyetThong = people.filter(p => isHuyetThong(p));
+
+    // v3.4.2 — SORT ỔN ĐỊNH
+    // 1. Theo sibling_order (null → 9999)
+    // 2. Tiebreaker: created_at (ổn định giữa các lần load)
+    // 3. Tiebreaker cuối: full_name (A-Z)
     huyetThong.sort((a, b) => {
-      const aOrder = a.sibling_order || 999;
-      const bOrder = b.sibling_order || 999;
-      return aOrder - bOrder;
+      const aOrder = a.sibling_order != null ? a.sibling_order : 9999;
+      const bOrder = b.sibling_order != null ? b.sibling_order : 9999;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+
+      const aCreated = a.created_at || '';
+      const bCreated = b.created_at || '';
+      if (aCreated !== bCreated) return aCreated.localeCompare(bCreated);
+
+      return (a.full_name || '').localeCompare(b.full_name || '', 'vi');
     });
 
     const genSection = document.createElement('div');
@@ -605,6 +621,11 @@ function createPersonMini(person) {
 
   const genStr = person.generation ? getGenerationLabel(person.generation) : '';
 
+  // v3.4.2 — Badge cảnh báo phối ngẫu chưa liên kết
+  const badgeHtml = isUnlinkedSpouse(person)
+    ? '<span style="display:inline-block;background:#FFF3CD;color:#856404;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;margin-top:4px;">⚠️ Phối ngẫu chưa liên kết</span>'
+    : '';
+
   let reorderHtml = '';
   if (isReorderMode && person.sibling_order != null) {
     reorderHtml =
@@ -616,6 +637,7 @@ function createPersonMini(person) {
 
   card.innerHTML =
     '<div class="' + nameClass + '">' + (person.full_name || '(chưa có tên)') + '</div>' +
+    badgeHtml +
     (dateStr ? '<div class="person-mini__dates">' + dateStr + '</div>' : '') +
     (genStr ? '<div class="person-mini__generation">' + genStr + '</div>' : '') +
     reorderHtml;
@@ -853,7 +875,7 @@ function formatText(text) {
   return String(content).split('\n').map(line => '<p>' + line + '</p>').join('');
 }
 
-console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v3.4.1)', 'font-size: 20px; color: #01285E; font-weight: bold;');
+console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v3.4.2)', 'font-size: 20px; color: #01285E; font-weight: bold;');
 
 /* ============================================
    BỘ ĐẾM KÝ TỰ CHO TEXTAREA
