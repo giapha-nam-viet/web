@@ -914,3 +914,34 @@ body.reorder-mode .person-mini:hover {
   gap: 8px !important;
   flex-wrap: wrap !important;
 }
+/* ============================================
+   PHASE A (v3.3) — Tên đậm + gạch chân khi có đủ năm sinh + năm mất
+   ============================================ */
+.person-mini__name--full-dates {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 2px;
+}
+
+.person-view__name--full-dates {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 2px;
+}
+
+/* ============================================
+   PHASE A (v3.3) — Cặp Huyết thống / Phối ngẫu
+   - Phối ngẫu 1 nằm ngang hàng với người huyết thống
+   - Phối ngẫu 2, 3... xếp dọc xuống dưới
+   ============================================ */
+.couple-row > div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.couple-row > div:last-child > .person-mini {
+  width: 100%;
+}
