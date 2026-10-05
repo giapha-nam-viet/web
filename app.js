@@ -1,12 +1,9 @@
 /* ============================================
-   GIA PHẢ NAM VIỆT - APP.JS (v3.3)
-   - Đăng nhập bằng MẬT KHẨU (thay magic link)
-   - Sửa "Đời thứ nhất" (bỏ Thủy tổ)
-   - Thêm 5 chủ đề Ngoại phả
-   - Thêm 3 nút điều hướng ← → TRỞ VỀ
-   - Thêm chức năng SẮP XẾP THỨ BẬC (▲▼)
-   - B2: Bộ đếm ký tự cho bio + conflictNote
-   - v3.3 Phase A: Thẻ tên đậm + gạch chân khi đủ năm sinh/mất
+   GIA PHẢ NAM VIỆT - APP.JS (v3.4)
+   - v3.0: Đăng nhập bằng mật khẩu
+   - v3.3: Phase A — viết hoa + đậm gạch chân
+   - v3.4: Tự động nhận diện huyết thống vs phối ngẫu
+     dựa vào role + role_type + marriages
    ============================================ */
 
 const SUPABASE_URL = 'https://bqojzghxgdkrfyhnvpku.supabase.co';
@@ -57,7 +54,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 /* ============================================
-   TAB CHÍNH + HISTORY (Back/Forward)
+   TAB CHÍNH + HISTORY
    ============================================ */
 function switchTab(tabId, push = true) {
   const tabs = document.querySelectorAll('.tab');
@@ -94,7 +91,7 @@ function setupTabs() {
 }
 
 /* ============================================
-   3 NÚT ĐIỀU HƯỚNG ← → TRỞ VỀ
+   3 NÚT ĐIỀU HƯỚNG
    ============================================ */
 function setupNavigation() {
   window.addEventListener('popstate', (e) => {
@@ -137,7 +134,7 @@ function setupSubTabs() {
 }
 
 /* ============================================
-   AUTH — v3.0: ĐĂNG NHẬP BẰNG MẬT KHẨU
+   AUTH — ĐĂNG NHẬP BẰNG MẬT KHẨU
    ============================================ */
 function setupAuth() {
   const loginBtn = document.getElementById('loginBtn');
@@ -153,7 +150,6 @@ function setupAuth() {
     return;
   }
 
-  // ---- 1. Thêm ô mật khẩu nếu chưa có ----
   let passwordInput = document.getElementById('loginPassword');
   if (!passwordInput) {
     passwordInput = document.createElement('input');
@@ -166,10 +162,8 @@ function setupAuth() {
     emailInput.insertAdjacentElement('afterend', passwordInput);
   }
 
-  // ---- 2. Đổi nhãn nút chính thành "Đăng nhập" ----
   submitBtn.textContent = 'Đăng nhập';
 
-  // ---- 3. Tạo nút phụ "Gửi link qua email" (magic link dự phòng) ----
   let magicBtn = document.getElementById('magicLinkBtn');
   if (!magicBtn) {
     magicBtn = document.createElement('button');
@@ -181,7 +175,6 @@ function setupAuth() {
     submitBtn.insertAdjacentElement('afterend', magicBtn);
   }
 
-  // ---- 4. Mở/đóng modal ----
   loginBtn.addEventListener('click', () => {
     loginModal.style.display = 'flex';
     msg.textContent = '';
@@ -197,7 +190,6 @@ function setupAuth() {
     });
   }
 
-  // ---- 5. Enter để đăng nhập ----
   const handleEnter = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -207,7 +199,6 @@ function setupAuth() {
   emailInput.addEventListener('keydown', handleEnter);
   passwordInput.addEventListener('keydown', handleEnter);
 
-  // ---- 6. Nút ĐĂNG NHẬP (bằng mật khẩu) ----
   submitBtn.addEventListener('click', async () => {
     const email = emailInput.value.trim();
     const password = passwordInput.value;
@@ -268,7 +259,6 @@ function setupAuth() {
     }
   });
 
-  // ---- 7. Nút phụ "Gửi link qua email" (magic link dự phòng) ----
   magicBtn.addEventListener('click', async () => {
     const email = emailInput.value.trim();
     msg.className = 'modal__note';
@@ -303,7 +293,6 @@ function setupAuth() {
     }
   });
 
-  // ---- 8. Đăng xuất ----
   logoutBtn.addEventListener('click', async () => {
     if (!confirm('Bạn chắc chắn muốn đăng xuất?')) return;
     if (sbClient) await sbClient.auth.signOut();
@@ -361,7 +350,7 @@ async function loadSettings() {
 }
 
 /* ============================================
-   DỮ LIỆU CHÍNH (PERSONS + MARRIAGES + PARENT_CHILD)
+   DỮ LIỆU CHÍNH
    ============================================ */
 async function loadAllData() {
   const grid = document.getElementById('personGrid');
@@ -406,7 +395,7 @@ function getSpouses(personId) {
 }
 
 /* ============================================
-   NHÃN "ĐỜI THỨ ..." — KHÔNG DÙNG "THỦY TỔ"
+   NHÃN "ĐỜI THỨ ..."
    ============================================ */
 function getGenerationLabel(gen) {
   const n = parseInt(gen, 10);
@@ -423,6 +412,76 @@ function getGenerationLabel(gen) {
     10: "Đời thứ mười"
   };
   return map[n] || ('Đời thứ ' + n);
+}
+
+/* ============================================
+   v3.4 — XÁC ĐỊNH HUYẾT THỐNG HAY PHỐI NGẪU
+   
+   Quy tắc:
+   1. role = 'Huyết thống' → huyết thống
+   2. role_type chứa 'Dâu', 'Rể', 'Vợ', 'Chồng' → phối ngẫu
+   3. role có giá trị khác 'Huyết thống' → phối ngẫu
+   4. role + role_type đều rỗng → dựa vào marriages + parent_child
+   ============================================ */
+function isHuyetThong(person) {
+  const role = (person.role || '').trim();
+  const roleType = (person.role_type || '').trim();
+
+  // 1. Role rõ ràng
+  if (role === 'Huyết thống') return true;
+
+  // 2. role_type có từ khoá phối ngẫu
+  const phoiNgauKeywords = ['Dâu', 'Rể', 'Vợ', 'Chồng', 'Phối ngẫu'];
+  const roleTypeLower = roleType.toLowerCase();
+  for (const kw of phoiNgauKeywords) {
+    if (roleTypeLower.includes(kw.toLowerCase())) return false;
+  }
+
+  // 3. role có giá trị khác (không phải Huyết thống) → phối ngẫu
+  if (role && role !== 'Huyết thống') return false;
+
+  // 4. Role rỗng → tự suy đoán
+  const marriage = allMarriages.find(m =>
+    m.husband_id === person.id || m.wife_id === person.id
+  );
+
+  if (!marriage) {
+    // Không có vợ/chồng → mặc định huyết thống
+    return true;
+  }
+
+  const otherId = marriage.husband_id === person.id
+    ? marriage.wife_id
+    : marriage.husband_id;
+  const other = allPersons.find(p => p.id === otherId);
+
+  if (!other) return true;
+
+  const otherRole = (other.role || '').trim();
+  const otherRoleType = (other.role_type || '').trim();
+
+  // 4a. Người kia có role Huyết thống rõ ràng → mình là phối ngẫu
+  if (otherRole === 'Huyết thống') return false;
+
+  // 4b. Người kia có role_type phối ngẫu → mình là huyết thống
+  const otherRoleTypeLower = otherRoleType.toLowerCase();
+  for (const kw of phoiNgauKeywords) {
+    if (otherRoleTypeLower.includes(kw.toLowerCase())) return true;
+  }
+
+  // 4c. Xem ai có parent_child (làm con) → người đó huyết thống
+  const selfHasParent = allParentChild.some(pc => pc.child_id === person.id);
+  const otherHasParent = allParentChild.some(pc => pc.child_id === other.id);
+
+  if (selfHasParent) return true;
+  if (otherHasParent) return false;
+
+  // 4d. Cả 2 đời đầu, không parent → Nam huyết thống, Nữ phối ngẫu
+  if (person.gender === 'Nam' && other.gender === 'Nữ') return true;
+  if (person.gender === 'Nữ' && other.gender === 'Nam') return false;
+
+  // 4e. Mặc định
+  return true;
 }
 
 /* ============================================
@@ -448,7 +507,7 @@ function renderPersons() {
 
   sortedGens.forEach(gen => {
     const people = byGeneration[gen];
-    const huyetThong = people.filter(p => p.role === 'Huyết thống' || !p.role);
+    const huyetThong = people.filter(p => isHuyetThong(p));
     huyetThong.sort((a, b) => {
       const aOrder = a.sibling_order || 999;
       const bOrder = b.sibling_order || 999;
@@ -520,7 +579,6 @@ function createPersonMini(person) {
 
   let nameClass = 'person-mini__name';
   if (person.is_unknown) nameClass += ' person-mini__name--unknown';
-  // v3.3 Phase A: Đậm + gạch chân khi có đủ năm sinh + năm mất
   if (person.birth_year && person.death_year) nameClass += ' person-mini__name--full-dates';
 
   const dateParts = [];
@@ -532,7 +590,6 @@ function createPersonMini(person) {
 
   const genStr = person.generation ? getGenerationLabel(person.generation) : '';
 
-  // Nút sắp xếp ▲▼ — chỉ hiện khi bật chế độ sắp xếp
   let reorderHtml = '';
   if (isReorderMode && person.sibling_order != null) {
     reorderHtml =
@@ -601,7 +658,7 @@ function setupAddPerson() {
 }
 
 /* ============================================
-   SẮP XẾP THỨ BẬC (REORDER MODE)
+   SẮP XẾP THỨ BẬC
    ============================================ */
 function setupReorderMode() {
   const toggleBtn = document.getElementById('reorderToggleBtn');
@@ -656,7 +713,7 @@ async function movePersonUp(personId) {
     .filter(p =>
       p.generation === person.generation &&
       (p.branch || null) === (person.branch || null) &&
-      (p.role === 'Huyết thống' || !p.role) &&
+      isHuyetThong(p) &&
       p.sibling_order != null
     )
     .sort((a, b) => a.sibling_order - b.sibling_order);
@@ -675,7 +732,7 @@ async function movePersonDown(personId) {
     .filter(p =>
       p.generation === person.generation &&
       (p.branch || null) === (person.branch || null) &&
-      (p.role === 'Huyết thống' || !p.role) &&
+      isHuyetThong(p) &&
       p.sibling_order != null
     )
     .sort((a, b) => a.sibling_order - b.sibling_order);
@@ -781,10 +838,10 @@ function formatText(text) {
   return String(content).split('\n').map(line => '<p>' + line + '</p>').join('');
 }
 
-console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v3.3)', 'font-size: 20px; color: #01285E; font-weight: bold;');
+console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v3.4)', 'font-size: 20px; color: #01285E; font-weight: bold;');
 
 /* ============================================
-   BỘ ĐẾM KÝ TỰ CHO TEXTAREA (B2)
+   BỘ ĐẾM KÝ TỰ CHO TEXTAREA
    ============================================ */
 function updateCharCount(fieldId, maxChars) {
   const field = document.getElementById(fieldId);
