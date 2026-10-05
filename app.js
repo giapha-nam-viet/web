@@ -1,11 +1,12 @@
 /* ============================================
-   GIA PHẢ NAM VIỆT - APP.JS (v3.0)
+   GIA PHẢ NAM VIỆT - APP.JS (v3.3)
    - Đăng nhập bằng MẬT KHẨU (thay magic link)
    - Sửa "Đời thứ nhất" (bỏ Thủy tổ)
    - Thêm 5 chủ đề Ngoại phả
    - Thêm 3 nút điều hướng ← → TRỞ VỀ
    - Thêm chức năng SẮP XẾP THỨ BẬC (▲▼)
    - B2: Bộ đếm ký tự cho bio + conflictNote
+   - v3.3 Phase A: Thẻ tên đậm + gạch chân khi đủ năm sinh/mất
    ============================================ */
 
 const SUPABASE_URL = 'https://bqojzghxgdkrfyhnvpku.supabase.co';
@@ -137,9 +138,6 @@ function setupSubTabs() {
 
 /* ============================================
    AUTH — v3.0: ĐĂNG NHẬP BẰNG MẬT KHẨU
-   - Ô email + ô mật khẩu
-   - Nút "Đăng nhập" chính
-   - Nút phụ "Gửi link qua email" (magic link dự phòng)
    ============================================ */
 function setupAuth() {
   const loginBtn = document.getElementById('loginBtn');
@@ -522,6 +520,8 @@ function createPersonMini(person) {
 
   let nameClass = 'person-mini__name';
   if (person.is_unknown) nameClass += ' person-mini__name--unknown';
+  // v3.3 Phase A: Đậm + gạch chân khi có đủ năm sinh + năm mất
+  if (person.birth_year && person.death_year) nameClass += ' person-mini__name--full-dates';
 
   const dateParts = [];
   if (person.birth_year) dateParts.push(person.birth_year);
@@ -781,7 +781,7 @@ function formatText(text) {
   return String(content).split('\n').map(line => '<p>' + line + '</p>').join('');
 }
 
-console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v3.0)', 'font-size: 20px; color: #01285E; font-weight: bold;');
+console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v3.3)', 'font-size: 20px; color: #01285E; font-weight: bold;');
 
 /* ============================================
    BỘ ĐẾM KÝ TỰ CHO TEXTAREA (B2)
