@@ -1,10 +1,10 @@
 /* ============================================
-   GIA PHẢ NAM VIỆT - APP.JS (v3.4.2)
+   GIA PHẢ NAM VIỆT - APP.JS (v3.4.4)
    - v3.0: Đăng nhập bằng mật khẩu
    - v3.3: Phase A — viết hoa + đậm gạch chân
    - v3.4: Tự động nhận diện huyết thống vs phối ngẫu
-   - v3.4.1: FIX — không ẩn người chưa có marriage
-   - v3.4.2: FIX sort ổn định + badge "Chưa liên kết"
+   - v3.4.4: role_type = Dâu/Rể → LUÔN ở cột phải
+     (kể cả khi chưa có marriage) — có badge cảnh báo
    ============================================ */
 
 const SUPABASE_URL = 'https://bqojzghxgdkrfyhnvpku.supabase.co';
@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 /* ============================================
-   TAB CHÍNH + HISTORY
+   TAB CHÍNH
    ============================================ */
 function switchTab(tabId, push = true) {
   const tabs = document.querySelectorAll('.tab');
@@ -113,7 +113,7 @@ function updateNavButtons() {
 }
 
 /* ============================================
-   TABS PHỤ (Đời / Chi)
+   TABS PHỤ
    ============================================ */
 function setupSubTabs() {
   document.querySelectorAll('.sub-tab').forEach(btn => {
@@ -135,7 +135,7 @@ function setupSubTabs() {
 }
 
 /* ============================================
-   AUTH — ĐĂNG NHẬP BẰNG MẬT KHẨU
+   AUTH
    ============================================ */
 function setupAuth() {
   const loginBtn = document.getElementById('loginBtn');
@@ -416,91 +416,45 @@ function getGenerationLabel(gen) {
 }
 
 /* ============================================
-   v3.4.2 — XÁC ĐỊNH HUYẾT THỐNG HAY PHỐI NGẪU
+   v3.4.4 — XÁC ĐỊNH HUYẾT THỐNG HAY PHỐI NGẪU
    
-   Nguyên tắc AN TOÀN:
-   - CHỈ trả về false (phối ngẫu) khi CHẮC CHẮN
-   - Mọi trường hợp không rõ → trả về true (hiện cột trái)
-   - Không bao giờ để người bị ẩn khỏi danh sách
+   QUY TẮC MỚI (đơn giản, rõ ràng):
+   1. role_type chứa 'Dâu/Rể/Vợ/Chồng/Phối ngẫu' → PHỐI NGẪU (cột phải) — LUÔN LUÔN
+   2. role = 'Huyết thống' → HUYẾT THỐNG (cột trái)
+   3. Các trường hợp khác → mặc định HUYẾT THỐNG
    ============================================ */
 function isHuyetThong(person) {
   if (!person) return true;
 
+  const roleType = (person.role_type || '').trim().toLowerCase();
   const role = (person.role || '').trim();
-  const roleType = (person.role_type || '').trim();
 
-  // 1. Role Huyết thống rõ ràng
+  // 1. role_type có từ khoá phối ngẫu → LUÔN phối ngẫu
+  const phoiNgauKeywords = ['dâu', 'rể', 'vợ', 'chồng', 'phối ngẫu'];
+  if (phoiNgauKeywords.some(kw => roleType.includes(kw))) {
+    return false;
+  }
+
+  // 2. role = 'Huyết thống' → huyết thống
   if (role === 'Huyết thống') return true;
 
-  // Tìm marriage của người này
-  const marriage = allMarriages.find(m =>
-    m.husband_id === person.id || m.wife_id === person.id
-  );
-
-  // 2 & 3. role_type có từ khoá phối ngẫu
-  const phoiNgauKeywords = ['Dâu', 'Rể', 'Vợ', 'Chồng', 'Phối ngẫu'];
-  const roleTypeLower = roleType.toLowerCase();
-  const isPhoiNgauType = phoiNgauKeywords.some(kw =>
-    roleTypeLower.includes(kw.toLowerCase())
-  );
-
-  if (isPhoiNgauType) {
-    if (marriage) return false; // có marriage → cột phải
-    return true;                 // chưa liên kết → tạm hiện cột trái + badge
-  }
-
-  // 4. role có giá trị khác Huyết thống → phối ngẫu
+  // 3. role có giá trị khác → phối ngẫu
   if (role && role !== 'Huyết thống') return false;
 
-  // 5. Role rỗng → suy đoán
-  if (!marriage) return true;
-
-  const otherId = marriage.husband_id === person.id
-    ? marriage.wife_id
-    : marriage.husband_id;
-  const other = allPersons.find(p => p.id === otherId);
-
-  if (!other) return true;
-
-  const otherRole = (other.role || '').trim();
-  const otherRoleType = (other.role_type || '').trim();
-
-  if (otherRole === 'Huyết thống') return false;
-
-  const otherRoleTypeLower = otherRoleType.toLowerCase();
-  for (const kw of phoiNgauKeywords) {
-    if (otherRoleTypeLower.includes(kw.toLowerCase())) return true;
-  }
-
-  const selfHasParent = allParentChild.some(pc => pc.child_id === person.id);
-  const otherHasParent = allParentChild.some(pc => pc.child_id === other.id);
-
-  if (selfHasParent) return true;
-  if (otherHasParent) return false;
-
-  if (person.gender === 'Nam' && other.gender === 'Nữ') return true;
-  if (person.gender === 'Nữ' && other.gender === 'Nam') return false;
-
+  // 4. Mặc định huyết thống
   return true;
 }
 
 /* ============================================
-   v3.4.2 — KIỂM TRA NGƯỜI LÀ PHỐI NGẪU CHƯA LIÊN KẾT
-   (có role_type Dâu/Rể nhưng chưa có marriage)
+   v3.4.4 — KIỂM TRA PHỐI NGẪU CHƯA LIÊN KẾT
+   (Dâu/Rể nhưng chưa có marriage)
    ============================================ */
 function isUnlinkedSpouse(person) {
   if (!person) return false;
-
-  const roleType = (person.role_type || '').toLowerCase();
-  const looksLikeSpouse = ['dâu', 'rể', 'vợ', 'chồng', 'phối ngẫu'].some(kw =>
-    roleType.includes(kw)
-  );
-  if (!looksLikeSpouse) return false;
-
+  if (isHuyetThong(person)) return false;
   const hasMarriage = allMarriages.some(m =>
     m.husband_id === person.id || m.wife_id === person.id
   );
-
   return !hasMarriage;
 }
 
@@ -529,10 +483,7 @@ function renderPersons() {
     const people = byGeneration[gen];
     const huyetThong = people.filter(p => isHuyetThong(p));
 
-    // v3.4.2 — SORT ỔN ĐỊNH
-    // 1. Theo sibling_order (null → 9999)
-    // 2. Tiebreaker: created_at (ổn định giữa các lần load)
-    // 3. Tiebreaker cuối: full_name (A-Z)
+    // SORT ỔN ĐỊNH
     huyetThong.sort((a, b) => {
       const aOrder = a.sibling_order != null ? a.sibling_order : 9999;
       const bOrder = b.sibling_order != null ? b.sibling_order : 9999;
@@ -597,6 +548,33 @@ function renderPersons() {
       });
     }
 
+    // v3.4.4 — PHỐI NGẪU CHƯA LIÊN KẾT
+    // Hiện các Dâu/Rể không có marriage ở cột phải (không có cặp)
+    const orphanSpouses = people.filter(p => isUnlinkedSpouse(p));
+    orphanSpouses.sort((a, b) => {
+      const aCreated = a.created_at || '';
+      const bCreated = b.created_at || '';
+      if (aCreated !== bCreated) return aCreated.localeCompare(bCreated);
+      return (a.full_name || '').localeCompare(b.full_name || '', 'vi');
+    });
+
+    orphanSpouses.forEach(p => {
+      const coupleRow = document.createElement('div');
+      coupleRow.className = 'couple-row';
+
+      // Cột trái trống
+      const leftCol = document.createElement('div');
+      leftCol.innerHTML = '<div class="person-mini" style="opacity:0;pointer-events:none;min-height:0;padding:0;border:none;"></div>';
+
+      // Cột phải có người
+      const rightCol = document.createElement('div');
+      rightCol.appendChild(createPersonMini(p));
+
+      coupleRow.appendChild(leftCol);
+      coupleRow.appendChild(rightCol);
+      genSection.appendChild(coupleRow);
+    });
+
     grid.appendChild(genSection);
   });
 }
@@ -621,9 +599,9 @@ function createPersonMini(person) {
 
   const genStr = person.generation ? getGenerationLabel(person.generation) : '';
 
-  // v3.4.2 — Badge cảnh báo phối ngẫu chưa liên kết
+  // Badge cho phối ngẫu chưa liên kết
   const badgeHtml = isUnlinkedSpouse(person)
-    ? '<span style="display:inline-block;background:#FFF3CD;color:#856404;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;margin-top:4px;">⚠️ Phối ngẫu chưa liên kết</span>'
+    ? '<span style="display:inline-block;background:#FFF3CD;color:#856404;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;margin-top:4px;">⚠️ Chưa liên kết vợ/chồng</span>'
     : '';
 
   let reorderHtml = '';
@@ -781,7 +759,7 @@ async function movePersonDown(personId) {
 }
 
 /* ============================================
-   NGOẠI PHẢ — 5 CHỦ ĐỀ
+   NGOẠI PHẢ
    ============================================ */
 const TOPICS = {
   all: 'Tất cả',
@@ -875,10 +853,10 @@ function formatText(text) {
   return String(content).split('\n').map(line => '<p>' + line + '</p>').join('');
 }
 
-console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v3.4.2)', 'font-size: 20px; color: #01285E; font-weight: bold;');
+console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v3.4.4)', 'font-size: 20px; color: #01285E; font-weight: bold;');
 
 /* ============================================
-   BỘ ĐẾM KÝ TỰ CHO TEXTAREA
+   BỘ ĐẾM KÝ TỰ
    ============================================ */
 function updateCharCount(fieldId, maxChars) {
   const field = document.getElementById(fieldId);
