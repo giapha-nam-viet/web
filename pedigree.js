@@ -1,10 +1,5 @@
 /* ============================================================
-   pedigree.js — Phase B2 (v2.0)
-   - Query focus theo full_name (KHÔNG hardcode ID)
-   - Node to: 200x80, hiện full name
-   - Sort con theo sibling_order
-   - Màu node: #88a9ad (huyết thống) / #b4c8ca (phối ngẫu)
-   - Đường nối phân biệt 5 loại con + Legend
+   pedigree.js — Phase B2 (v2.3) — FINAL
    ============================================================ */
 (function () {
   'use strict';
@@ -17,8 +12,8 @@
   let svg, gRoot, gLinks, gNodes, zoomBehavior;
   let tooltipEl, loadingEl;
   let initialized = false;
+  let isRendering = false;
   let currentNodes = [];
-  let FOCUS_ID = null;
 
   function getSupabase() {
     if (window.sbClient) return window.sbClient;
@@ -31,30 +26,29 @@
   }
 
   async function waitForSession(sb, maxMs) {
-    maxMs = maxMs || 8000;
+    maxMs = maxMs || 6000;
     const start = Date.now();
     let tries = 0;
     while (Date.now() - start < maxMs) {
       try {
         const { data } = await sb.auth.getSession();
         if (data && data.session && data.session.user) {
-          console.log('[Pedigree] ✓ Session OK sau ' + tries + ' lần thử');
+          console.log('[Pedigree] ✓ Session OK sau ' + tries + ' lần');
           return true;
         }
       } catch (e) {}
       await new Promise(r => setTimeout(r, 250));
       tries++;
     }
-    console.warn('[Pedigree] ⚠ Session không có sau ' + maxMs + 'ms');
     return false;
   }
 
   async function waitForAppData(maxMs) {
-    maxMs = maxMs || 8000;
+    maxMs = maxMs || 6000;
     const start = Date.now();
     while (Date.now() - start < maxMs) {
       if (window.allPersons && window.allPersons.length > 0) {
-        console.log('[Pedigree] ✓ window.allPersons đã có ' + window.allPersons.length + ' người');
+        console.log('[Pedigree] ✓ allPersons ' + window.allPersons.length + ' người');
         return true;
       }
       await new Promise(r => setTimeout(r, 200));
@@ -73,13 +67,10 @@
     let lastRes = { data: [], error: null };
     for (let i = 0; i < retries; i++) {
       try {
-        const q = buildQuery(sb.from(table).select('*'));
-        const res = await q;
+        const res = await buildQuery(sb.from(table).select('*'));
         lastRes = res;
         if (!res.error && res.data && res.data.length > 0) return res;
-      } catch (e) {
-        lastRes = { data: [], error: e };
-      }
+      } catch (e) { lastRes = { data: [], error: e }; }
       await new Promise(r => setTimeout(r, 300));
     }
     return lastRes;
@@ -89,89 +80,58 @@
     const sb = getSupabase();
     if (!sb) throw new Error('Không tìm thấy Supabase client.');
 
-    console.log('[Pedigree] Đợi session + app data...');
-    await Promise.all([waitForSession(sb, 8000), waitForAppData(8000)]);
+    console.log('[Pedigree] Bắt đầu loadData...');
+    await Promise.all([waitForSession(sb, 6000), waitForAppData(6000)]);
 
-    console.log('[Pedigree] Đang tìm "' + FOCUS_NAME + '" theo tên...');
-    const focusRes = await queryArray(sb, 'persons',
-      q => q.eq('full_name', FOCUS_NAME), 6
-    );
+    const focusRes = await queryArray(sb, 'persons', q => q.eq('full_name', FOCUS_NAME), 6);
     let focus = (focusRes.data || [])[0];
-
     if (!focus && window.allPersons) {
       focus = window.allPersons.find(p => (p.full_name || '').trim() === FOCUS_NAME);
-      if (focus) console.log('[Pedigree] ✓ Fallback window.allPersons');
     }
-    if (!focus) throw new Error('Không tìm thấy "' + FOCUS_NAME + '" trong DB');
-
-    FOCUS_ID = focus.id;
-    console.log('[Pedigree] ✓ Tìm thấy:', focus.full_name, '| ID thật:', FOCUS_ID);
+    if (!focus) throw new Error('Không tìm thấy "' + FOCUS_NAME + '"');
+    console.log('[Pedigree] ✓ Focus:', focus.full_name);
 
     // Cha mẹ
-    const pcParentsRes = await queryArray(sb, 'parent_child',
-      q => q.eq('child_id', FOCUS_ID), 5
-    );
-    const pcParents = pcParentsRes.data || [];
-    const parentIds = pcParents.map(r => r.parent_id);
+    const pcP = await queryArray(sb, 'parent_child', q => q.eq('child_id', focus.id), 5);
+    const pIds = (pcP.data || []).map(r => r.parent_id);
     let parents = [];
-    if (parentIds.length) {
-      const psRes = await queryArray(sb, 'persons', q => q.in('id', parentIds), 4);
-      parents = psRes.data || [];
+    if (pIds.length) {
+      const pRes = await queryArray(sb, 'persons', q => q.in('id', pIds), 4);
+      parents = pRes.data || [];
     }
 
     // Vợ/chồng
-    const marrRes = await queryArray(sb, 'marriages',
-      q => q.or('husband_id.eq.' + FOCUS_ID + ',wife_id.eq.' + FOCUS_ID), 5
-    );
-    const marriages = marrRes.data || [];
+    const mRes = await queryArray(sb, 'marriages', q => q.or('husband_id.eq.' + focus.id + ',wife_id.eq.' + focus.id), 5);
+    const marriages = mRes.data || [];
     let spouse = null;
     if (marriages.length) {
       const m = marriages[0];
-      const spouseId = m.husband_id === FOCUS_ID ? m.wife_id : m.husband_id;
-      const spRes = await queryArray(sb, 'persons', q => q.eq('id', spouseId), 4);
-      spouse = (spRes.data || [])[0] || null;
+      const sid = m.husband_id === focus.id ? m.wife_id : m.husband_id;
+      const sRes = await queryArray(sb, 'persons', q => q.eq('id', sid), 4);
+      spouse = (sRes.data || [])[0] || null;
     }
 
-    // Con — v2.0: lấy relation + parent_role
-    const pcChildRes = await queryArray(sb, 'parent_child',
-      q => q.eq('parent_id', FOCUS_ID), 5
-    );
-    const pcChildren = pcChildRes.data || [];
-
-    const childRelMap = {};
-    pcChildren.forEach(r => {
-      childRelMap[r.child_id] = {
-        relation: r.relation || 'Con chung',
-        parent_role: r.parent_role || 'Bố'
-      };
-    });
-
-    const childIds = pcChildren.map(r => r.child_id);
+    // Con
+    const pcC = await queryArray(sb, 'parent_child', q => q.eq('parent_id', focus.id), 5);
+    const pcChildren = pcC.data || [];
+    const relMap = {};
+    pcChildren.forEach(r => { relMap[r.child_id] = { relation: r.relation || 'Con chung', parent_role: r.parent_role || 'Bố' }; });
+    const cIds = pcChildren.map(r => r.child_id);
     let children = [];
-    if (childIds.length) {
-      const csRes = await queryArray(sb, 'persons', q => q.in('id', childIds), 4);
-      children = (csRes.data || []).map(c => {
-        const rel = childRelMap[c.id] || {};
-        return Object.assign({}, c, {
-          relation: rel.relation || 'Con chung',
-          parent_role: rel.parent_role || 'Bố'
+    if (cIds.length) {
+      const cRes = await queryArray(sb, 'persons', q => q.in('id', cIds), 4);
+      children = (cRes.data || []).map(c => Object.assign({}, c, relMap[c.id] || {}))
+        .sort((a, b) => {
+          const ao = a.sibling_order != null ? a.sibling_order : 9999;
+          const bo = b.sibling_order != null ? b.sibling_order : 9999;
+          if (ao !== bo) return ao - bo;
+          const ay = a.birth_year || 9999, by = b.birth_year || 9999;
+          if (ay !== by) return ay - by;
+          return (a.full_name || '').localeCompare(b.full_name || '', 'vi');
         });
-      }).sort((a, b) => {
-        const aOrder = a.sibling_order != null ? a.sibling_order : 9999;
-        const bOrder = b.sibling_order != null ? b.sibling_order : 9999;
-        if (aOrder !== bOrder) return aOrder - bOrder;
-        const aYear = a.birth_year != null ? a.birth_year : 9999;
-        const bYear = b.birth_year != null ? b.birth_year : 9999;
-        if (aYear !== bYear) return aYear - bYear;
-        return (a.full_name || '').localeCompare(b.full_name || '', 'vi');
-      });
     }
 
-    console.log('[Pedigree] ✓ Load xong: ' + focus.full_name +
-                ' | cha mẹ=' + parents.length +
-                ' | vợ/chồng=' + (spouse ? 1 : 0) +
-                ' | con=' + children.length);
-
+    console.log('[Pedigree] ✓ Load xong: cha mẹ=' + parents.length + ' | vợ=' + (spouse ? 1 : 0) + ' | con=' + children.length);
     return { focus, parents, spouse, children };
   }
 
@@ -181,13 +141,13 @@
     gLinks.selectAll('*').remove();
     gNodes.selectAll('*').remove();
 
-    const nodes = [];
-    const links = [];
+    const nodes = [], links = [];
 
     const father = parents.find(p => /nam|male/i.test(p.gender || ''));
     const mother = parents.find(p => /nữ|nu|female/i.test(p.gender || ''));
     const others = parents.filter(p => p !== father && p !== mother);
     const parentList = [father, mother, ...others].filter(Boolean);
+
     parentList.forEach((p, i) => {
       const total = parentList.length;
       const offset = (i - (total - 1) / 2) * (NODE_W + GAP_X);
@@ -210,51 +170,34 @@
     if (parentList.length) links.push({ type: 'blood', from: 'parentsCenter', to: focus.id });
     if (spouse) links.push({ type: 'marriage', from: focus.id, to: spouse.id, direct: true });
 
-    // v2.0: Đường nối con phân biệt theo relation
     children.forEach(c => {
-      const relation = (c.relation || 'Con chung').toLowerCase();
+      const rel = (c.relation || 'Con chung').toLowerCase();
       let linkType = 'child-chung';
       let fromAnchor = 'coupleCenter';
-
-      if (relation.includes('riêng ngoài') || relation.includes('ngoài huyết thống')) {
+      if (rel.includes('riêng ngoài') || rel.includes('ngoài huyết thống')) {
         linkType = 'child-ngoai-huyet-thong';
         fromAnchor = (c.parent_role === 'Bố') ? 'focus' : 'spouse';
-      } else if (relation.includes('nuôi')) {
+      } else if (rel.includes('nuôi')) {
         linkType = 'child-nuoi';
         fromAnchor = (c.parent_role === 'Bố') ? 'focus' : 'spouse';
-      } else if (relation.includes('giá thú')) {
+      } else if (rel.includes('giá thú')) {
         linkType = 'child-ngoai-gia-thu';
         fromAnchor = (c.parent_role === 'Bố') ? 'focus' : 'spouse';
-      } else if (relation.includes('riêng')) {
+      } else if (rel.includes('riêng')) {
         linkType = 'child-rieng';
         fromAnchor = (c.parent_role === 'Bố') ? 'focus' : 'spouse';
-      } else {
-        linkType = 'child-chung';
-        fromAnchor = 'coupleCenter';
       }
-
-      links.push({
-        type: 'blood',
-        linkType: linkType,
-        from: fromAnchor,
-        to: c.id
-      });
+      links.push({ type: 'blood', linkType: linkType, from: fromAnchor, to: c.id });
     });
 
     gLinks.selectAll('path').data(links).enter().append('path')
-      .attr('class', d => {
-        let cls = 'ped-link';
-        if (d.type === 'marriage') cls += ' marriage';
-        if (d.linkType) cls += ' ' + d.linkType;
-        return cls;
-      })
+      .attr('class', d => 'ped-link' + (d.type === 'marriage' ? ' marriage' : '') + (d.linkType ? ' ' + d.linkType : ''))
       .attr('d', d => computePath(d, nodes));
 
     const nodeSel = gNodes.selectAll('g.ped-node')
       .data(nodes, d => d.id).enter().append('g')
       .attr('class', d => 'ped-node ' + d.kind)
       .attr('transform', d => 'translate(' + (d.x - NODE_W/2) + ',' + (d.y - NODE_H/2) + ')')
-      .attr('data-id', d => d.id)
       .style('cursor', 'pointer');
 
     nodeSel.append('rect').attr('width', NODE_W).attr('height', NODE_H);
@@ -287,41 +230,35 @@
 
     if (link.from === 'parentsCenter' && link.to) {
       const child = get(link.to);
-      const parents = nodes.filter(n => n.kind === 'parent');
-      if (!parents.length || !child) return '';
-      const cx = parents.reduce((s, n) => s + n.x, 0) / parents.length;
+      const ps = nodes.filter(n => n.kind === 'parent');
+      if (!ps.length || !child) return '';
+      const cx = ps.reduce((s, n) => s + n.x, 0) / ps.length;
       const cy = -ROW_Y + NODE_H / 2;
-      const childTopY = child.y - NODE_H / 2;
-      const midY = (cy + childTopY) / 2;
-      return 'M ' + cx + ' ' + cy + ' L ' + cx + ' ' + midY + ' L ' + child.x + ' ' + midY + ' L ' + child.x + ' ' + childTopY;
+      const cty = child.y - NODE_H / 2;
+      const my = (cy + cty) / 2;
+      return 'M ' + cx + ' ' + cy + ' L ' + cx + ' ' + my + ' L ' + child.x + ' ' + my + ' L ' + child.x + ' ' + cty;
     }
 
     if (link.from === 'coupleCenter' && link.to) {
       const child = get(link.to);
       if (!child) return '';
-      const couple = nodes.filter(n => n.kind === 'focus' || n.kind === 'spouse');
-      const cx = couple.reduce((s, n) => s + n.x, 0) / couple.length;
+      const cp = nodes.filter(n => n.kind === 'focus' || n.kind === 'spouse');
+      const cx = cp.reduce((s, n) => s + n.x, 0) / cp.length;
       const cy = NODE_H / 2;
-      const childTopY = child.y - NODE_H / 2;
-      const midY = (cy + childTopY) / 2;
-      return 'M ' + cx + ' ' + cy + ' L ' + cx + ' ' + midY + ' L ' + child.x + ' ' + midY + ' L ' + child.x + ' ' + childTopY;
+      const cty = child.y - NODE_H / 2;
+      const my = (cy + cty) / 2;
+      return 'M ' + cx + ' ' + cy + ' L ' + cx + ' ' + my + ' L ' + child.x + ' ' + my + ' L ' + child.x + ' ' + cty;
     }
 
-    // v2.0: Nối từ 1 bên (focus hoặc spouse)
     if ((link.from === 'focus' || link.from === 'spouse') && link.to) {
       const child = get(link.to);
       if (!child) return '';
-      const anchor = nodes.find(n => {
-        if (link.from === 'focus') return n.kind === 'focus';
-        if (link.from === 'spouse') return n.kind === 'spouse';
-        return false;
-      });
+      const anchor = nodes.find(n => link.from === 'focus' ? n.kind === 'focus' : n.kind === 'spouse');
       if (!anchor) return '';
-      const px = anchor.x;
       const py = anchor.y + NODE_H / 2;
-      const childTopY = child.y - NODE_H / 2;
-      const midY = (py + childTopY) / 2;
-      return 'M ' + px + ' ' + py + ' L ' + px + ' ' + midY + ' L ' + child.x + ' ' + midY + ' L ' + child.x + ' ' + childTopY;
+      const cty = child.y - NODE_H / 2;
+      const my = (py + cty) / 2;
+      return 'M ' + anchor.x + ' ' + py + ' L ' + anchor.x + ' ' + my + ' L ' + child.x + ' ' + my + ' L ' + child.x + ' ' + cty;
     }
 
     if (link.direct && link.from && link.to) {
@@ -336,109 +273,81 @@
 
   function centerView(nodes) {
     if (!nodes.length || !svg || !svg.node()) return;
-    const xs = nodes.map(n => n.x);
-    const ys = nodes.map(n => n.y);
+    const xs = nodes.map(n => n.x), ys = nodes.map(n => n.y);
     const minX = Math.min.apply(null, xs) - NODE_W;
     const maxX = Math.max.apply(null, xs) + NODE_W;
     const minY = Math.min.apply(null, ys) - NODE_H;
     const maxY = Math.max.apply(null, ys) + NODE_H;
     const w = maxX - minX, h = maxY - minY;
-    const svgW = svg.node().clientWidth;
-    const svgH = svg.node().clientHeight;
+    const svgW = svg.node().clientWidth, svgH = svg.node().clientHeight;
     if (!svgW || !svgH) return;
     const scale = Math.min(svgW / w, svgH / h) * 0.85;
     const tx = svgW / 2 - ((minX + maxX) / 2) * scale;
     const ty = svgH / 2 - ((minY + maxY) / 2) * scale;
-    svg.transition().duration(400).call(
-      zoomBehavior.transform,
-      d3.zoomIdentity.translate(tx, ty).scale(scale)
-    );
+    svg.transition().duration(400).call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
   }
 
   function showTooltip(event, d) {
     const p = d.person;
-    const relInfo = p.relation ? '<br>Quan hệ: <strong>' + p.relation + '</strong>' : '';
-    tooltipEl.innerHTML =
-      '<strong style="color:#C49504">' + (p.full_name || '?') + '</strong>' + relInfo + '<br>' +
+    const rel = p.relation ? '<br>Quan hệ: <strong>' + p.relation + '</strong>' : '';
+    tooltipEl.innerHTML = '<strong style="color:#C49504">' + (p.full_name || '?') + '</strong>' + rel + '<br>' +
       'Đời: ' + (p.generation || '?') + ' • Nhánh: ' + (p.branch || '?') + '<br>' +
       'Giới tính: ' + (p.gender || '?') + '<br>' +
       'Sinh: ' + (p.birth_year || '?') + (p.death_year ? ' • Mất: ' + p.death_year : '') + '<br>' +
       '<em style="opacity:.7">Đúp chuột để mở Danh tính</em>';
     tooltipEl.style.display = 'block';
-    const rect = svg.node().getBoundingClientRect();
-    tooltipEl.style.left = (event.clientX - rect.left + 12) + 'px';
-    tooltipEl.style.top  = (event.clientY - rect.top  + 12) + 'px';
+    const r = svg.node().getBoundingClientRect();
+    tooltipEl.style.left = (event.clientX - r.left + 12) + 'px';
+    tooltipEl.style.top  = (event.clientY - r.top  + 12) + 'px';
     clearTimeout(showTooltip._t);
     showTooltip._t = setTimeout(() => { tooltipEl.style.display = 'none'; }, 4000);
   }
 
-  function openInDanhTinh(personId) {
-    const tabDanhTinh = document.querySelector('[data-tab="danh-tinh"]');
-    if (tabDanhTinh) tabDanhTinh.click();
+  function openInDanhTinh(id) {
+    const tab = document.querySelector('[data-tab="danh-tinh"]');
+    if (tab) tab.click();
     setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('pedigree:open-person', { detail: { personId } }));
+      window.dispatchEvent(new CustomEvent('pedigree:open-person', { detail: { personId: id } }));
       ['openPersonDetail','showPersonDetail','selectPerson','openPersonModal','openPersonForm'].forEach(fn => {
-        if (typeof window[fn] === 'function') {
-          try { window[fn](personId); } catch (e) {}
-        }
+        if (typeof window[fn] === 'function') try { window[fn](id); } catch (e) {}
       });
     }, 200);
   }
 
   function drawLegend() {
-    // Xoá legend cũ nếu có
     svg.selectAll('.ped-legend').remove();
-
-    const legend = svg.append('g')
-      .attr('class', 'ped-legend')
-      .attr('transform', 'translate(20, 20)');
-
-    const legendItems = [
-      { color: '#bd9733', dash: null,  label: 'Con chung' },
-      { color: '#bd9733', dash: null,  label: 'Con riêng (huyết thống)' },
-      { color: '#bd9733', dash: '6 4', label: 'Con ngoài giá thú' },
-      { color: '#01285E', dash: '4 3', label: 'Con nuôi' },
-      { color: '#999999', dash: '2 4', label: '🔒 Con riêng ngoài huyết thống' }
+    const legend = svg.append('g').attr('class', 'ped-legend').attr('transform', 'translate(20, 20)');
+    const items = [
+      { c: '#bd9733', d: null,  l: 'Con chung / Con riêng' },
+      { c: '#bd9733', d: '6 4', l: 'Con ngoài giá thú' },
+      { c: '#01285E', d: '4 3', l: 'Con nuôi' },
+      { c: '#999999', d: '2 4', l: '🔒 Con riêng ngoài huyết thống' }
     ];
-
-    const boxH = legendItems.length * 22 + 20;
-    const boxW = 260;
-
     legend.append('rect')
       .attr('x', -8).attr('y', -8)
-      .attr('width', boxW).attr('height', boxH)
-      .attr('fill', 'rgba(255, 255, 255, 0.92)')
-      .attr('stroke', '#88a9ad')
-      .attr('stroke-width', 1.5)
+      .attr('width', 260).attr('height', items.length * 22 + 20)
+      .attr('fill', 'rgba(255,255,255,0.92)')
+      .attr('stroke', '#88a9ad').attr('stroke-width', 1.5)
       .attr('rx', 8).attr('ry', 8);
-
-    legendItems.forEach((item, i) => {
+    items.forEach((item, i) => {
       const y = i * 22 + 8;
       const line = legend.append('line')
-        .attr('x1', 0).attr('y1', y)
-        .attr('x2', 32).attr('y2', y)
-        .attr('stroke', item.color)
-        .attr('stroke-width', 2.5);
-      if (item.dash) line.attr('stroke-dasharray', item.dash);
-
-      legend.append('text')
-        .attr('x', 40).attr('y', y + 4)
-        .attr('font-size', '12px')
-        .attr('font-family', 'Be Vietnam Pro, sans-serif')
-        .attr('fill', '#01285E')
-        .attr('font-weight', '500')
-        .text(item.label);
+        .attr('x1', 0).attr('y1', y).attr('x2', 32).attr('y2', y)
+        .attr('stroke', item.c).attr('stroke-width', 2.5);
+      if (item.d) line.attr('stroke-dasharray', item.d);
+      legend.append('text').attr('x', 40).attr('y', y + 4)
+        .attr('font-size', '12px').attr('fill', '#01285E').attr('font-weight', '500')
+        .text(item.l);
     });
   }
 
   async function init() {
     if (initialized) return;
     initialized = true;
+    console.log('[Pedigree] === INIT ===');
 
     svg = d3.select('#pedigree-svg');
-    // Xoá sạch SVG trước khi vẽ (tránh chồng chéo khi init lại)
     svg.selectAll('*').remove();
-
     tooltipEl = document.getElementById('pedigree-tooltip');
     loadingEl = document.getElementById('pedigree-loading');
 
@@ -446,22 +355,16 @@
     gLinks = gRoot.append('g').attr('class', 'ped-links');
     gNodes = gRoot.append('g').attr('class', 'ped-nodes');
 
-    zoomBehavior = d3.zoom()
-      .scaleExtent([0.2, 2.5])
+    zoomBehavior = d3.zoom().scaleExtent([0.2, 2.5])
       .on('zoom', (e) => {
         gRoot.attr('transform', e.transform);
-        // Legend cũng di chuyển theo scale nhưng ở góc cố định
-        const legend = svg.select('.ped-legend');
-        if (!legend.empty()) {
-          const scale = e.transform.k;
-          legend.attr('transform',
-            'translate(' + (20 / scale) + ', ' + (20 / scale) + ') scale(' + (1 / scale) + ')'
-          );
+        const lg = svg.select('.ped-legend');
+        if (!lg.empty()) {
+          const k = e.transform.k;
+          lg.attr('transform', 'translate(' + (20/k) + ',' + (20/k) + ') scale(' + (1/k) + ')');
         }
       });
     svg.call(zoomBehavior);
-
-    // Vẽ legend 1 lần duy nhất
     drawLegend();
 
     const zIn = document.getElementById('pedZoomIn');
@@ -471,49 +374,41 @@
     if (zIn) zIn.addEventListener('click', () => svg.transition().call(zoomBehavior.scaleBy, 1.25));
     if (zOut) zOut.addEventListener('click', () => svg.transition().call(zoomBehavior.scaleBy, 0.8));
     if (zReset) zReset.addEventListener('click', () => centerView(currentNodes));
-    if (zFocus) zFocus.addEventListener('click', () => loadAndRender());
+    if (zFocus) zFocus.addEventListener('click', loadAndRender);
 
     await loadAndRender();
   }
 
   async function loadAndRender() {
+    if (isRendering) return;
+    isRendering = true;
     try {
-      if (loadingEl) {
-        loadingEl.style.display = 'block';
-        loadingEl.innerHTML = 'Đang tải phả đồ...';
-      }
+      if (loadingEl) { loadingEl.style.display = 'block'; loadingEl.innerHTML = 'Đang tải phả đồ...'; }
+      console.log('[Pedigree] loadData...');
       const data = await loadData();
+      console.log('[Pedigree] render...');
       render(data);
       if (loadingEl) loadingEl.style.display = 'none';
+      console.log('[Pedigree] ✓ DONE');
     } catch (err) {
-      console.error('[Pedigree]', err);
-      if (loadingEl) loadingEl.innerHTML = '⚠ Lỗi tải dữ liệu.<br><small>' + (err.message || err) + '</small>';
-    }
+      console.error('[Pedigree] ❌', err);
+      if (loadingEl) loadingEl.innerHTML = '⚠ ' + (err.message || err);
+    } finally { isRendering = false; }
   }
 
-   let hookDone = false;
-  function hookTab() {
-    if (hookDone) return;
-    hookDone = true;
-
-    const tabPhaDo = document.querySelector('[data-tab="pha-do"]');
-    if (tabPhaDo) {
-      tabPhaDo.addEventListener('click', () => {
-        // Chỉ init lần đầu, các lần sau chỉ reload data
-        if (!initialized) {
-          setTimeout(init, 200);
-        } else {
-          loadAndRender();
-        }
-      });
-    }
-    // Không tự init khi vào trang — chờ user click tab
+  function onTabClick() {
+    console.log('[Pedigree] Tab clicked');
+    setTimeout(() => { if (!initialized) init(); else loadAndRender(); }, 200);
   }
+
+  function setup() {
+    const tab = document.querySelector('[data-tab="pha-do"]');
+    if (tab) tab.addEventListener('click', onTabClick);
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', hookTab);
-  } else {
-    hookTab();
-  }
+    document.addEventListener('DOMContentLoaded', setup);
+  } else { setup(); }
 
   window.Pedigree = { init, loadAndRender, reload: loadAndRender };
 })();
