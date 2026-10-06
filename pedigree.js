@@ -1,11 +1,11 @@
 /* ============================================================
-   pedigree.js — Phase B1 (v1.2)
-   Fix: poll session + không dùng maybeSingle (tránh 406)
+   pedigree.js — Phase B1 (v1.3)
+   Fix: query focus theo full_name (KHÔNG hardcode ID)
    ============================================================ */
 (function () {
   'use strict';
 
-  const FOCUS_ID = '4a918514-5402-470d-8aa0-52b41edb23f6';
+  const FOCUS_NAME = 'Phạm Văn Mỹ';   // ⭐ Query theo tên — an toàn tuyệt đối
   const NODE_W = 170, NODE_H = 70;
   const GAP_X  = 50;
   const ROW_Y  = 200;
@@ -14,6 +14,7 @@
   let tooltipEl, loadingEl;
   let initialized = false;
   let currentNodes = [];
+  let FOCUS_ID = null;   // ⭐ Sẽ lấy từ DB
 
   function getSupabase() {
     if (window.sbClient) return window.sbClient;
@@ -25,7 +26,6 @@
     return null;
   }
 
-  // ⭐ POLL session — chờ tối đa 8s
   async function waitForSession(sb, maxMs) {
     maxMs = maxMs || 8000;
     const start = Date.now();
@@ -34,18 +34,17 @@
       try {
         const { data } = await sb.auth.getSession();
         if (data && data.session && data.session.user) {
-          console.log('[Pedigree] ✓ Session OK sau ' + tries + ' lần thử: ' + data.session.user.email);
+          console.log('[Pedigree] ✓ Session OK sau ' + tries + ' lần thử');
           return true;
         }
       } catch (e) {}
       await new Promise(r => setTimeout(r, 250));
       tries++;
     }
-    console.warn('[Pedigree] ⚠ Session không có sau ' + maxMs + 'ms — chạy dạng anon');
+    console.warn('[Pedigree] ⚠ Session không có sau ' + maxMs + 'ms');
     return false;
   }
 
-  // ⭐ POLL window.allPersons — chờ app.js load xong
   async function waitForAppData(maxMs) {
     maxMs = maxMs || 8000;
     const start = Date.now();
@@ -56,7 +55,6 @@
       }
       await new Promise(r => setTimeout(r, 200));
     }
-    console.warn('[Pedigree] ⚠ window.allPersons vẫn rỗng sau ' + maxMs + 'ms');
     return false;
   }
 
@@ -72,7 +70,6 @@
     return parts[0] + ' ' + parts[parts.length - 1];
   }
 
-  // ⭐ Query dạng array (KHÔNG dùng .single/.maybeSingle để tránh 406)
   async function queryArray(sb, table, buildQuery, retries) {
     retries = retries || 5;
     let lastRes = { data: [], error: null };
@@ -82,13 +79,10 @@
         const res = await q;
         lastRes = res;
         if (!res.error && res.data && res.data.length > 0) return res;
-        if (res.error && res.error.code !== 'PGRST116') {
-          console.warn('[Pedigree] ' + table + ' try ' + i + ':', res.error.message);
-        }
       } catch (e) {
         lastRes = { data: [], error: e };
       }
-      await new Promise(r => setTimeout(r, 400));
+      await new Promise(r => setTimeout(r, 300));
     }
     return lastRes;
   }
@@ -97,25 +91,28 @@
     const sb = getSupabase();
     if (!sb) throw new Error('Không tìm thấy Supabase client.');
 
-    // ⭐ BƯỚC QUAN TRỌNG NHẤT — chờ session + app data
     console.log('[Pedigree] Đợi session + app data...');
-    await Promise.all([
-      waitForSession(sb, 8000),
-      waitForAppData(8000)
-    ]);
+    await Promise.all([waitForSession(sb, 8000), waitForAppData(8000)]);
 
-    // 1. Mỹ
+    // ⭐ BƯỚC 1: Tìm Mỹ THEO TÊN (không dùng ID)
+    console.log('[Pedigree] Đang tìm "' + FOCUS_NAME + '" theo tên...');
     const focusRes = await queryArray(sb, 'persons',
-      q => q.eq('id', FOCUS_ID), 6
+      q => q.eq('full_name', FOCUS_NAME), 6
     );
     let focus = (focusRes.data || [])[0];
-    if (!focus && window.allPersons) {
-      focus = window.allPersons.find(p => p.id === FOCUS_ID);
-      if (focus) console.log('[Pedigree] ✓ Dùng fallback window.allPersons cho Mỹ');
-    }
-    if (!focus) throw new Error('Không tìm thấy Phạm Văn Mỹ (ID ' + FOCUS_ID + ')');
 
-    // 2. Cha mẹ
+    // Fallback: dùng window.allPersons
+    if (!focus && window.allPersons) {
+      focus = window.allPersons.find(p => (p.full_name || '').trim() === FOCUS_NAME);
+      if (focus) console.log('[Pedigree] ✓ Fallback window.allPersons');
+    }
+    if (!focus) throw new Error('Không tìm thấy "' + FOCUS_NAME + '" trong DB');
+
+    // ⭐ BƯỚC 2: Lấy ID THẬT từ DB
+    FOCUS_ID = focus.id;
+    console.log('[Pedigree] ✓ Tìm thấy:', focus.full_name, '| ID thật:', FOCUS_ID, '| độ dài ID:', FOCUS_ID.length);
+
+    // BƯỚC 3: Cha mẹ
     const pcParentsRes = await queryArray(sb, 'parent_child',
       q => q.eq('child_id', FOCUS_ID), 5
     );
@@ -127,7 +124,7 @@
       parents = psRes.data || [];
     }
 
-    // 3. Vợ/chồng
+    // BƯỚC 4: Vợ/chồng
     const marrRes = await queryArray(sb, 'marriages',
       q => q.or('husband_id.eq.' + FOCUS_ID + ',wife_id.eq.' + FOCUS_ID), 5
     );
@@ -140,7 +137,7 @@
       spouse = (spRes.data || [])[0] || null;
     }
 
-    // 4. Con
+    // BƯỚC 5: Con
     const pcChildRes = await queryArray(sb, 'parent_child',
       q => q.eq('parent_id', FOCUS_ID), 5
     );
@@ -330,10 +327,14 @@
       .on('zoom', (e) => gRoot.attr('transform', e.transform));
     svg.call(zoomBehavior);
 
-    document.getElementById('pedZoomIn') && document.getElementById('pedZoomIn').addEventListener('click', () => svg.transition().call(zoomBehavior.scaleBy, 1.25));
-    document.getElementById('pedZoomOut') && document.getElementById('pedZoomOut').addEventListener('click', () => svg.transition().call(zoomBehavior.scaleBy, 0.8));
-    document.getElementById('pedZoomReset') && document.getElementById('pedZoomReset').addEventListener('click', () => centerView(currentNodes));
-    document.getElementById('pedFocusMy') && document.getElementById('pedFocusMy').addEventListener('click', () => loadAndRender());
+    const zIn = document.getElementById('pedZoomIn');
+    const zOut = document.getElementById('pedZoomOut');
+    const zReset = document.getElementById('pedZoomReset');
+    const zFocus = document.getElementById('pedFocusMy');
+    if (zIn) zIn.addEventListener('click', () => svg.transition().call(zoomBehavior.scaleBy, 1.25));
+    if (zOut) zOut.addEventListener('click', () => svg.transition().call(zoomBehavior.scaleBy, 0.8));
+    if (zReset) zReset.addEventListener('click', () => centerView(currentNodes));
+    if (zFocus) zFocus.addEventListener('click', () => loadAndRender());
 
     await loadAndRender();
   }
