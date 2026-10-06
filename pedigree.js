@@ -1,6 +1,6 @@
 /* ============================================================
-   pedigree.js — Phase B1 (v1.1)
-   Fix: đợi auth session restore + retry + fallback window.allPersons
+   pedigree.js — Phase B1 (v1.2)
+   Fix: poll session + không dùng maybeSingle (tránh 406)
    ============================================================ */
 (function () {
   'use strict';
@@ -15,43 +15,55 @@
   let initialized = false;
   let currentNodes = [];
 
-  // ---------- Tìm Supabase client ----------
   function getSupabase() {
-    if (typeof window.sbClient !== 'undefined') return window.sbClient;
-    if (typeof window.appSupabase !== 'undefined') return window.appSupabase;
-    if (typeof window.supabaseClient !== 'undefined') return window.supabaseClient;
-    if (typeof window._supabase !== 'undefined') return window._supabase;
-    if (typeof window.supabase !== 'undefined' && typeof window.supabase.from === 'function') {
-      return window.supabase;
-    }
+    if (window.sbClient) return window.sbClient;
+    if (window.appSupabase) return window.appSupabase;
+    if (window.supabaseClient) return window.supabaseClient;
+    if (window._supabase) return window._supabase;
+    if (window.supabase && typeof window.supabase.from === 'function') return window.supabase;
     try { if (typeof supabase !== 'undefined' && typeof supabase.from === 'function') return supabase; } catch (e) {}
     return null;
   }
 
-  // ---------- Đợi auth + app.js load xong ----------
-  async function ensureAuthReady(sb) {
-    // 1. Đợi Supabase auth session restore xong
-    try {
-      if (sb && sb.auth && typeof sb.auth.getSession === 'function') {
-        await sb.auth.getSession();
-      }
-    } catch (e) {
-      console.warn('[Pedigree] getSession warning:', e);
-    }
-
-    // 2. Đợi app.js load xong (window.allPersons có data) — tối đa 8s
+  // ⭐ POLL session — chờ tối đa 8s
+  async function waitForSession(sb, maxMs) {
+    maxMs = maxMs || 8000;
+    const start = Date.now();
     let tries = 0;
-    while ((!window.allPersons || window.allPersons.length === 0) && tries < 40) {
-      await new Promise(r => setTimeout(r, 200));
+    while (Date.now() - start < maxMs) {
+      try {
+        const { data } = await sb.auth.getSession();
+        if (data && data.session && data.session.user) {
+          console.log('[Pedigree] ✓ Session OK sau ' + tries + ' lần thử: ' + data.session.user.email);
+          return true;
+        }
+      } catch (e) {}
+      await new Promise(r => setTimeout(r, 250));
       tries++;
     }
+    console.warn('[Pedigree] ⚠ Session không có sau ' + maxMs + 'ms — chạy dạng anon');
+    return false;
   }
 
-  // ---------- Tiện ích ----------
+  // ⭐ POLL window.allPersons — chờ app.js load xong
+  async function waitForAppData(maxMs) {
+    maxMs = maxMs || 8000;
+    const start = Date.now();
+    while (Date.now() - start < maxMs) {
+      if (window.allPersons && window.allPersons.length > 0) {
+        console.log('[Pedigree] ✓ window.allPersons đã có ' + window.allPersons.length + ' người');
+        return true;
+      }
+      await new Promise(r => setTimeout(r, 200));
+    }
+    console.warn('[Pedigree] ⚠ window.allPersons vẫn rỗng sau ' + maxMs + 'ms');
+    return false;
+  }
+
   function yearText(p) {
     const b = p.birth_year ? String(p.birth_year) : '?';
     const d = p.death_year ? String(p.death_year) : '';
-    return d ? `(${b} - ${d})` : `(${b})`;
+    return d ? '(' + b + ' - ' + d + ')' : '(' + b + ')';
   }
   function shortName(name) {
     if (!name) return '?';
@@ -60,93 +72,96 @@
     return parts[0] + ' ' + parts[parts.length - 1];
   }
 
-  // ---------- Query với retry ----------
-  async function queryWithRetry(builderFn, maxTries) {
-    maxTries = maxTries || 4;
-    for (let i = 0; i < maxTries; i++) {
-      const res = await builderFn();
-      if (!res.error && res.data && (!Array.isArray(res.data) || res.data.length > 0)) {
-        return res;
+  // ⭐ Query dạng array (KHÔNG dùng .single/.maybeSingle để tránh 406)
+  async function queryArray(sb, table, buildQuery, retries) {
+    retries = retries || 5;
+    let lastRes = { data: [], error: null };
+    for (let i = 0; i < retries; i++) {
+      try {
+        const q = buildQuery(sb.from(table).select('*'));
+        const res = await q;
+        lastRes = res;
+        if (!res.error && res.data && res.data.length > 0) return res;
+        if (res.error && res.error.code !== 'PGRST116') {
+          console.warn('[Pedigree] ' + table + ' try ' + i + ':', res.error.message);
+        }
+      } catch (e) {
+        lastRes = { data: [], error: e };
       }
-      if (res.error && res.error.code !== 'PGRST116') {
-        // Lỗi thực sự (không phải "no rows")
-        console.warn('[Pedigree] Query error (try ' + i + '):', res.error);
-      }
-      await new Promise(r => setTimeout(r, 300));
+      await new Promise(r => setTimeout(r, 400));
     }
-    // Trả về lần cuối cùng
-    return await builderFn();
+    return lastRes;
   }
 
-  // ---------- Load dữ liệu ----------
   async function loadData() {
     const sb = getSupabase();
-    if (!sb) throw new Error('Không tìm thấy Supabase client. Thêm window.appSupabase = sbClient vào app.js.');
+    if (!sb) throw new Error('Không tìm thấy Supabase client.');
 
-    // ⭐ BƯỚC QUAN TRỌNG: Đợi auth session + app.js load xong
-    await ensureAuthReady(sb);
+    // ⭐ BƯỚC QUAN TRỌNG NHẤT — chờ session + app data
+    console.log('[Pedigree] Đợi session + app data...');
+    await Promise.all([
+      waitForSession(sb, 8000),
+      waitForAppData(8000)
+    ]);
 
-    // 1. Thông tin Mỹ
-    const focusRes = await queryWithRetry(() =>
-      sb.from('persons').select('*').eq('id', FOCUS_ID).maybeSingle()
+    // 1. Mỹ
+    const focusRes = await queryArray(sb, 'persons',
+      q => q.eq('id', FOCUS_ID), 6
     );
-    let focus = focusRes.data;
-    if (!focus) {
-      // Fallback: dùng window.allPersons
-      focus = (window.allPersons || []).find(p => p.id === FOCUS_ID);
+    let focus = (focusRes.data || [])[0];
+    if (!focus && window.allPersons) {
+      focus = window.allPersons.find(p => p.id === FOCUS_ID);
+      if (focus) console.log('[Pedigree] ✓ Dùng fallback window.allPersons cho Mỹ');
     }
     if (!focus) throw new Error('Không tìm thấy Phạm Văn Mỹ (ID ' + FOCUS_ID + ')');
 
     // 2. Cha mẹ
-    const pcParentsRes = await queryWithRetry(() =>
-      sb.from('parent_child').select('*').eq('child_id', FOCUS_ID)
+    const pcParentsRes = await queryArray(sb, 'parent_child',
+      q => q.eq('child_id', FOCUS_ID), 5
     );
     const pcParents = pcParentsRes.data || [];
     const parentIds = pcParents.map(r => r.parent_id);
     let parents = [];
     if (parentIds.length) {
-      const psRes = await queryWithRetry(() =>
-        sb.from('persons').select('*').in('id', parentIds)
-      );
+      const psRes = await queryArray(sb, 'persons', q => q.in('id', parentIds), 4);
       parents = psRes.data || [];
     }
 
-    // 3. Vợ/chồng (B1: chỉ lấy người đầu tiên)
-    const marriagesRes = await queryWithRetry(() =>
-      sb.from('marriages').select('*').or(`husband_id.eq.${FOCUS_ID},wife_id.eq.${FOCUS_ID}`)
+    // 3. Vợ/chồng
+    const marrRes = await queryArray(sb, 'marriages',
+      q => q.or('husband_id.eq.' + FOCUS_ID + ',wife_id.eq.' + FOCUS_ID), 5
     );
-    const marriages = marriagesRes.data || [];
+    const marriages = marrRes.data || [];
     let spouse = null;
     if (marriages.length) {
       const m = marriages[0];
       const spouseId = m.husband_id === FOCUS_ID ? m.wife_id : m.husband_id;
-      const spRes = await queryWithRetry(() =>
-        sb.from('persons').select('*').eq('id', spouseId).maybeSingle()
-      );
-      spouse = spRes.data || null;
+      const spRes = await queryArray(sb, 'persons', q => q.eq('id', spouseId), 4);
+      spouse = (spRes.data || [])[0] || null;
     }
 
     // 4. Con
-    const pcChildrenRes = await queryWithRetry(() =>
-      sb.from('parent_child').select('*').eq('parent_id', FOCUS_ID)
+    const pcChildRes = await queryArray(sb, 'parent_child',
+      q => q.eq('parent_id', FOCUS_ID), 5
     );
-    const pcChildren = pcChildrenRes.data || [];
+    const pcChildren = pcChildRes.data || [];
     const childIds = pcChildren.map(r => r.child_id);
     let children = [];
     if (childIds.length) {
-      const csRes = await queryWithRetry(() =>
-        sb.from('persons').select('*').in('id', childIds)
-      );
+      const csRes = await queryArray(sb, 'persons', q => q.in('id', childIds), 4);
       children = (csRes.data || []).sort((a, b) => (a.birth_year || 9999) - (b.birth_year || 9999));
     }
+
+    console.log('[Pedigree] ✓ Load xong: Mỹ=' + focus.full_name +
+                ' | cha mẹ=' + parents.length +
+                ' | vợ/chồng=' + (spouse ? 1 : 0) +
+                ' | con=' + children.length);
 
     return { focus, parents, spouse, children };
   }
 
-  // ---------- Render ----------
   function render(data) {
     const { focus, parents, spouse, children } = data;
-
     gRoot.selectAll('*').remove();
 
     const nodes = [];
@@ -179,41 +194,31 @@
     if (spouse) links.push({ type: 'marriage', from: focus.id, to: spouse.id, direct: true });
     children.forEach(c => links.push({ type: 'blood', from: 'coupleCenter', to: c.id }));
 
-    gLinks.selectAll('path')
-      .data(links)
-      .enter()
-      .append('path')
+    gLinks.selectAll('path').data(links).enter().append('path')
       .attr('class', d => 'ped-link ' + (d.type === 'marriage' ? 'marriage' : ''))
       .attr('d', d => computePath(d, nodes));
 
     const nodeSel = gNodes.selectAll('g.ped-node')
-      .data(nodes, d => d.id)
-      .enter()
-      .append('g')
+      .data(nodes, d => d.id).enter().append('g')
       .attr('class', d => 'ped-node ' + d.kind)
-      .attr('transform', d => `translate(${d.x - NODE_W/2}, ${d.y - NODE_H/2})`)
+      .attr('transform', d => 'translate(' + (d.x - NODE_W/2) + ',' + (d.y - NODE_H/2) + ')')
       .attr('data-id', d => d.id)
       .style('cursor', 'pointer');
 
     nodeSel.append('rect').attr('width', NODE_W).attr('height', NODE_H);
 
-    nodeSel.append('text')
-      .attr('class', 'name')
-      .attr('x', NODE_W / 2).attr('y', 26)
-      .attr('text-anchor', 'middle')
+    nodeSel.append('text').attr('class', 'name')
+      .attr('x', NODE_W / 2).attr('y', 26).attr('text-anchor', 'middle')
       .text(d => shortName(d.person.full_name));
 
-    nodeSel.append('text')
-      .attr('class', 'years')
-      .attr('x', NODE_W / 2).attr('y', 46)
-      .attr('text-anchor', 'middle')
+    nodeSel.append('text').attr('class', 'years')
+      .attr('x', NODE_W / 2).attr('y', 46).attr('text-anchor', 'middle')
       .text(d => yearText(d.person));
 
     if (!spouse) {
       nodeSel.filter(d => d.kind === 'focus').append('text')
         .attr('class', 'badge-unlinked')
-        .attr('x', NODE_W / 2).attr('y', 62)
-        .attr('text-anchor', 'middle')
+        .attr('x', NODE_W / 2).attr('y', 62).attr('text-anchor', 'middle')
         .text('⚠ chưa liên kết');
     }
 
@@ -236,9 +241,8 @@
       const cy = -ROW_Y + NODE_H / 2;
       const childTopY = child.y - NODE_H / 2;
       const midY = (cy + childTopY) / 2;
-      return `M ${cx} ${cy} L ${cx} ${midY} L ${child.x} ${midY} L ${child.x} ${childTopY}`;
+      return 'M ' + cx + ' ' + cy + ' L ' + cx + ' ' + midY + ' L ' + child.x + ' ' + midY + ' L ' + child.x + ' ' + childTopY;
     }
-
     if (link.from === 'coupleCenter' && link.to) {
       const child = get(link.to);
       if (!child) return '';
@@ -247,15 +251,14 @@
       const cy = NODE_H / 2;
       const childTopY = child.y - NODE_H / 2;
       const midY = (cy + childTopY) / 2;
-      return `M ${cx} ${cy} L ${cx} ${midY} L ${child.x} ${midY} L ${child.x} ${childTopY}`;
+      return 'M ' + cx + ' ' + cy + ' L ' + cx + ' ' + midY + ' L ' + child.x + ' ' + midY + ' L ' + child.x + ' ' + childTopY;
     }
-
     if (link.direct && link.from && link.to) {
       const a = get(link.from), b = get(link.to);
       if (!a || !b) return '';
       const x1 = a.x + (a.x < b.x ? NODE_W / 2 : -NODE_W / 2);
       const x2 = b.x + (b.x > a.x ? -NODE_W / 2 : NODE_W / 2);
-      return `M ${x1} ${a.y} L ${x2} ${b.y}`;
+      return 'M ' + x1 + ' ' + a.y + ' L ' + x2 + ' ' + b.y;
     }
     return '';
   }
@@ -264,10 +267,10 @@
     if (!nodes.length || !svg || !svg.node()) return;
     const xs = nodes.map(n => n.x);
     const ys = nodes.map(n => n.y);
-    const minX = Math.min(...xs) - NODE_W;
-    const maxX = Math.max(...xs) + NODE_W;
-    const minY = Math.min(...ys) - NODE_H;
-    const maxY = Math.max(...ys) + NODE_H;
+    const minX = Math.min.apply(null, xs) - NODE_W;
+    const maxX = Math.max.apply(null, xs) + NODE_W;
+    const minY = Math.min.apply(null, ys) - NODE_H;
+    const maxY = Math.max.apply(null, ys) + NODE_H;
     const w = maxX - minX, h = maxY - minY;
     const svgW = svg.node().clientWidth;
     const svgH = svg.node().clientHeight;
@@ -283,13 +286,12 @@
 
   function showTooltip(event, d) {
     const p = d.person;
-    tooltipEl.innerHTML = `
-      <strong style="color:#C49504">${p.full_name || '?'}</strong><br>
-      Đời: ${p.generation || '?'} • Nhánh: ${p.branch || '?'}<br>
-      Giới tính: ${p.gender || '?'}<br>
-      Sinh: ${p.birth_year || '?'}${p.death_year ? ' • Mất: ' + p.death_year : ''}<br>
-      <em style="opacity:.7">Đúp chuột để mở Danh tính</em>
-    `;
+    tooltipEl.innerHTML =
+      '<strong style="color:#C49504">' + (p.full_name || '?') + '</strong><br>' +
+      'Đời: ' + (p.generation || '?') + ' • Nhánh: ' + (p.branch || '?') + '<br>' +
+      'Giới tính: ' + (p.gender || '?') + '<br>' +
+      'Sinh: ' + (p.birth_year || '?') + (p.death_year ? ' • Mất: ' + p.death_year : '') + '<br>' +
+      '<em style="opacity:.7">Đúp chuột để mở Danh tính</em>';
     tooltipEl.style.display = 'block';
     const rect = svg.node().getBoundingClientRect();
     tooltipEl.style.left = (event.clientX - rect.left + 12) + 'px';
@@ -328,10 +330,10 @@
       .on('zoom', (e) => gRoot.attr('transform', e.transform));
     svg.call(zoomBehavior);
 
-    document.getElementById('pedZoomIn')?.addEventListener('click', () => svg.transition().call(zoomBehavior.scaleBy, 1.25));
-    document.getElementById('pedZoomOut')?.addEventListener('click', () => svg.transition().call(zoomBehavior.scaleBy, 0.8));
-    document.getElementById('pedZoomReset')?.addEventListener('click', () => centerView(currentNodes));
-    document.getElementById('pedFocusMy')?.addEventListener('click', () => loadAndRender());
+    document.getElementById('pedZoomIn') && document.getElementById('pedZoomIn').addEventListener('click', () => svg.transition().call(zoomBehavior.scaleBy, 1.25));
+    document.getElementById('pedZoomOut') && document.getElementById('pedZoomOut').addEventListener('click', () => svg.transition().call(zoomBehavior.scaleBy, 0.8));
+    document.getElementById('pedZoomReset') && document.getElementById('pedZoomReset').addEventListener('click', () => centerView(currentNodes));
+    document.getElementById('pedFocusMy') && document.getElementById('pedFocusMy').addEventListener('click', () => loadAndRender());
 
     await loadAndRender();
   }
@@ -353,12 +355,7 @@
 
   function hookTab() {
     const tabPhaDo = document.querySelector('[data-tab="pha-do"]');
-    if (tabPhaDo) {
-      tabPhaDo.addEventListener('click', () => {
-        // Đợi 400ms cho app.js check session xong
-        setTimeout(init, 400);
-      });
-    }
+    if (tabPhaDo) tabPhaDo.addEventListener('click', () => setTimeout(init, 200));
     const sec = document.getElementById('tab-pha-do');
     if (sec && sec.style.display !== 'none') init();
   }
