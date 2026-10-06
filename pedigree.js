@@ -1,12 +1,14 @@
 /* ============================================================
-   pedigree.js — Phase B1 (v1.3)
-   Fix: query focus theo full_name (KHÔNG hardcode ID)
+   pedigree.js — Phase B1 (v1.5)
+   - Query focus theo full_name (KHÔNG hardcode ID)
+   - Node to hơn: 200x80
+   - Hiện full name (không rút gọn)
    ============================================================ */
 (function () {
   'use strict';
 
-  const FOCUS_NAME = 'Phạm Văn Mỹ';   // ⭐ Query theo tên — an toàn tuyệt đối
-  const NODE_W = 170, NODE_H = 70;
+  const FOCUS_NAME = 'Phạm Văn Mỹ';
+  const NODE_W = 200, NODE_H = 80;   // ⭐ v1.5: to hơn
   const GAP_X  = 50;
   const ROW_Y  = 200;
 
@@ -14,7 +16,7 @@
   let tooltipEl, loadingEl;
   let initialized = false;
   let currentNodes = [];
-  let FOCUS_ID = null;   // ⭐ Sẽ lấy từ DB
+  let FOCUS_ID = null;
 
   function getSupabase() {
     if (window.sbClient) return window.sbClient;
@@ -63,12 +65,6 @@
     const d = p.death_year ? String(p.death_year) : '';
     return d ? '(' + b + ' - ' + d + ')' : '(' + b + ')';
   }
-  function shortName(name) {
-    if (!name) return '?';
-    const parts = name.trim().split(/\s+/);
-    if (parts.length <= 2) return name;
-    return parts[0] + ' ' + parts[parts.length - 1];
-  }
 
   async function queryArray(sb, table, buildQuery, retries) {
     retries = retries || 5;
@@ -94,25 +90,22 @@
     console.log('[Pedigree] Đợi session + app data...');
     await Promise.all([waitForSession(sb, 8000), waitForAppData(8000)]);
 
-    // ⭐ BƯỚC 1: Tìm Mỹ THEO TÊN (không dùng ID)
     console.log('[Pedigree] Đang tìm "' + FOCUS_NAME + '" theo tên...');
     const focusRes = await queryArray(sb, 'persons',
       q => q.eq('full_name', FOCUS_NAME), 6
     );
     let focus = (focusRes.data || [])[0];
 
-    // Fallback: dùng window.allPersons
     if (!focus && window.allPersons) {
       focus = window.allPersons.find(p => (p.full_name || '').trim() === FOCUS_NAME);
       if (focus) console.log('[Pedigree] ✓ Fallback window.allPersons');
     }
     if (!focus) throw new Error('Không tìm thấy "' + FOCUS_NAME + '" trong DB');
 
-    // ⭐ BƯỚC 2: Lấy ID THẬT từ DB
     FOCUS_ID = focus.id;
     console.log('[Pedigree] ✓ Tìm thấy:', focus.full_name, '| ID thật:', FOCUS_ID, '| độ dài ID:', FOCUS_ID.length);
 
-    // BƯỚC 3: Cha mẹ
+    // Cha mẹ
     const pcParentsRes = await queryArray(sb, 'parent_child',
       q => q.eq('child_id', FOCUS_ID), 5
     );
@@ -124,7 +117,7 @@
       parents = psRes.data || [];
     }
 
-    // BƯỚC 4: Vợ/chồng
+    // Vợ/chồng
     const marrRes = await queryArray(sb, 'marriages',
       q => q.or('husband_id.eq.' + FOCUS_ID + ',wife_id.eq.' + FOCUS_ID), 5
     );
@@ -137,7 +130,7 @@
       spouse = (spRes.data || [])[0] || null;
     }
 
-    // BƯỚC 5: Con
+    // Con
     const pcChildRes = await queryArray(sb, 'parent_child',
       q => q.eq('parent_id', FOCUS_ID), 5
     );
@@ -159,8 +152,9 @@
 
   function render(data) {
     const { focus, parents, spouse, children } = data;
-gLinks.selectAll('*').remove();
-gNodes.selectAll('*').remove();
+
+    gLinks.selectAll('*').remove();
+    gNodes.selectAll('*').remove();
 
     const nodes = [];
     const links = [];
@@ -205,18 +199,21 @@ gNodes.selectAll('*').remove();
 
     nodeSel.append('rect').attr('width', NODE_W).attr('height', NODE_H);
 
+    // ⭐ v1.5: Hiện FULL NAME, y=30
     nodeSel.append('text').attr('class', 'name')
-      .attr('x', NODE_W / 2).attr('y', 26).attr('text-anchor', 'middle')
-      .text(d => shortName(d.person.full_name));
+      .attr('x', NODE_W / 2).attr('y', 30).attr('text-anchor', 'middle')
+      .text(d => d.person.full_name || '?');
 
+    // ⭐ v1.5: y=54
     nodeSel.append('text').attr('class', 'years')
-      .attr('x', NODE_W / 2).attr('y', 46).attr('text-anchor', 'middle')
+      .attr('x', NODE_W / 2).attr('y', 54).attr('text-anchor', 'middle')
       .text(d => yearText(d.person));
 
     if (!spouse) {
+      // ⭐ v1.5: y=74
       nodeSel.filter(d => d.kind === 'focus').append('text')
         .attr('class', 'badge-unlinked')
-        .attr('x', NODE_W / 2).attr('y', 62).attr('text-anchor', 'middle')
+        .attr('x', NODE_W / 2).attr('y', 74).attr('text-anchor', 'middle')
         .text('⚠ chưa liên kết');
     }
 
