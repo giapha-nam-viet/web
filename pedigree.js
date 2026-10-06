@@ -1,14 +1,15 @@
 /* ============================================================
-   pedigree.js — Phase B1 (v1.5)
+   pedigree.js — Phase B1 (v1.6)
    - Query focus theo full_name (KHÔNG hardcode ID)
    - Node to hơn: 200x80
    - Hiện full name (không rút gọn)
+   - Sort con theo sibling_order (lớn → nhỏ, trái → phải)
    ============================================================ */
 (function () {
   'use strict';
 
   const FOCUS_NAME = 'Phạm Văn Mỹ';
-  const NODE_W = 200, NODE_H = 80;   // ⭐ v1.5: to hơn
+  const NODE_W = 200, NODE_H = 80;
   const GAP_X  = 50;
   const ROW_Y  = 200;
 
@@ -130,7 +131,7 @@
       spouse = (spRes.data || [])[0] || null;
     }
 
-    // Con
+    // Con — v1.6: sort theo sibling_order, fallback birth_year, cuối cùng tên
     const pcChildRes = await queryArray(sb, 'parent_child',
       q => q.eq('parent_id', FOCUS_ID), 5
     );
@@ -139,7 +140,15 @@
     let children = [];
     if (childIds.length) {
       const csRes = await queryArray(sb, 'persons', q => q.in('id', childIds), 4);
-      children = (csRes.data || []).sort((a, b) => (a.birth_year || 9999) - (b.birth_year || 9999));
+      children = (csRes.data || []).sort((a, b) => {
+        const aOrder = a.sibling_order != null ? a.sibling_order : 9999;
+        const bOrder = b.sibling_order != null ? b.sibling_order : 9999;
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        const aYear = a.birth_year != null ? a.birth_year : 9999;
+        const bYear = b.birth_year != null ? b.birth_year : 9999;
+        if (aYear !== bYear) return aYear - bYear;
+        return (a.full_name || '').localeCompare(b.full_name || '', 'vi');
+      });
     }
 
     console.log('[Pedigree] ✓ Load xong: Mỹ=' + focus.full_name +
@@ -199,18 +208,15 @@
 
     nodeSel.append('rect').attr('width', NODE_W).attr('height', NODE_H);
 
-    // ⭐ v1.5: Hiện FULL NAME, y=30
     nodeSel.append('text').attr('class', 'name')
       .attr('x', NODE_W / 2).attr('y', 30).attr('text-anchor', 'middle')
       .text(d => d.person.full_name || '?');
 
-    // ⭐ v1.5: y=54
     nodeSel.append('text').attr('class', 'years')
       .attr('x', NODE_W / 2).attr('y', 54).attr('text-anchor', 'middle')
       .text(d => yearText(d.person));
 
     if (!spouse) {
-      // ⭐ v1.5: y=74
       nodeSel.filter(d => d.kind === 'focus').append('text')
         .attr('class', 'badge-unlinked')
         .attr('x', NODE_W / 2).attr('y', 74).attr('text-anchor', 'middle')
