@@ -1,18 +1,19 @@
 /* ============================================
-   FORM LOGIC - GIA PHẢ NAM VIỆT (v3.3)
+   FORM LOGIC - GIA PHẢ NAM VIỆT (v3.4.3)
    - 2 tầng: Xem + Sửa
    - Nút "Đến Phả đồ"
-   - B3: Upload avatar lên Supabase Storage (bucket: avatars)
-   - v3.1: Nút XOÁ xoá sạch (không chặn dù có con)
-   - v3.2: Chặn trùng khi thêm mới (kiểm tra tên + năm sinh)
-   - v3.3 (Phase A): Tự viết hoa chữ cái đầu + đậm gạch chân khi đủ 2 năm
+   - B3: Upload avatar lên Supabase Storage
+   - v3.1: Nút XOÁ xoá sạch
+   - v3.2: Chặn trùng khi thêm mới
+   - v3.3: Phase A — viết hoa + đậm gạch chân
+   - v3.4.3: Fix refresh sau xoá/lưu (dùng loadAllData)
    ============================================ */
 
 let currentEditingPersonId = null;
 let currentViewMode = 'view';
 let tempChildrenList = [];
-let tempAvatarData = null;             // B3: chứa PUBLIC URL (không còn base64)
-let currentEditingAvatarPath = null;   // B3: path trên Storage để xoá ảnh cũ
+let tempAvatarData = null;
+let currentEditingAvatarPath = null;
 let cropper = null;
 let tempLinkedNoteIds = [];
 let allNotesCache = [];
@@ -20,7 +21,6 @@ let tempOriginalPerson = null;
 
 /* ============================================
    PHASE A — Chuẩn hoá tên: viết hoa chữ cái đầu
-   "phạm văn mỹ" → "Phạm Văn Mỹ"
    ============================================ */
 function capitalizeVietnameseName(str) {
   if (!str || typeof str !== 'string') return '';
@@ -35,8 +35,6 @@ function capitalizeVietnameseName(str) {
 
 /* ============================================
    B3 — HELPER: Public URL → Storage path
-   Ví dụ: https://xxx.supabase.co/storage/v1/object/public/avatars/UID/123.webp
-   → UID/123.webp
    ============================================ */
 function urlToStoragePath(publicUrl) {
   if (!publicUrl || typeof publicUrl !== 'string') return null;
@@ -44,6 +42,24 @@ function urlToStoragePath(publicUrl) {
   const idx = publicUrl.indexOf(marker);
   if (idx === -1) return null;
   return publicUrl.substring(idx + marker.length);
+}
+
+/* ============================================
+   v3.4.3 — HELPER: Refresh danh sách
+   Gọi loadAllData() trong app.js
+   ============================================ */
+async function refreshPersonList() {
+  try {
+    if (typeof window.loadAllData === 'function') {
+      await window.loadAllData();
+    } else if (typeof loadAllData === 'function') {
+      await loadAllData();
+    } else {
+      console.warn('⚠️ Không tìm thấy loadAllData() để refresh danh sách');
+    }
+  } catch (err) {
+    console.error('Lỗi refresh list:', err);
+  }
 }
 
 /* ============================================
@@ -139,9 +155,23 @@ async function showViewMode(personId) {
 
   try {
     const { data: person, error } = await window.sbClient
-      .from('persons').select('*').eq('id', personId).single();
+      .from('persons').select('*').eq('id', personId).maybeSingle();
+
     if (error) throw error;
-    if (!person) throw new Error('Không tìm thấy người này');
+    if (!person) {
+      // v3.4.3 — Người này không còn tồn tại (đã bị xoá)
+      document.getElementById('personViewContent').innerHTML =
+        '<p class="person-view__empty">⚠️ Người này không còn tồn tại.<br>Có thể đã bị xoá. Danh sách sẽ được làm mới.</p>';
+      // Đóng form sau 1.5s + refresh list
+      setTimeout(async () => {
+        hideModal('personFormModal');
+        document.body.style.overflow = '';
+        currentEditingPersonId = null;
+        currentViewMode = 'view';
+        await refreshPersonList();
+      }, 1500);
+      return;
+    }
 
     tempOriginalPerson = person;
 
@@ -200,7 +230,6 @@ function renderPersonView(person, spouseNames, fatherName, motherName) {
     avatarHtml = '<span class="person-view__avatar-placeholder">📷</span>';
   }
 
-  // PHASE A: Đậm + gạch chân khi có đủ năm sinh + năm mất
   const hasFullDates = person.birth_year && person.death_year;
   const nameClass = hasFullDates
     ? 'person-view__name person-view__name--full-dates'
@@ -278,7 +307,7 @@ function renderPersonView(person, spouseNames, fatherName, motherName) {
 function renderViewFooter() {
   const footer = document.getElementById('personFormFooter');
   const deleteBtn = currentEditingPersonId
-    ? '<button type="button" class="btn btn--danger" onclick="deletePerson()">🗑️ XÓA</button>'
+    ? '<button type="button" class="btn btn--danger" onclick="deletePerson()">🗑️ XOÁ</button>'
     : '';
 
   footer.innerHTML =
@@ -425,12 +454,6 @@ function rotateCropImage(d) { if (cropper) cropper.rotate(d); }
 function flipCropImage(dir) { if (cropper) dir === 'h' ? cropper.scaleX(-1) : cropper.scaleY(-1); }
 function resetCropImage() { if (cropper) cropper.reset(); }
 
-/* ------------------------------------------------------------
-   B3: confirmCrop — upload WebP lên bucket `avatars`
-   Path: {userId}/{timestamp}.webp
-   Sau khi upload → lấy public URL → lưu vào tempAvatarData
-   Đồng thời xoá ảnh cũ trên Storage (nếu có)
-   ------------------------------------------------------------ */
 async function confirmCrop() {
   if (!cropper) return;
 
@@ -796,9 +819,9 @@ async function loadPersonForEdit(personId) {
 
   try {
     const { data: person, error } = await window.sbClient
-      .from('persons').select('*').eq('id', personId).single();
+      .from('persons').select('*').eq('id', personId).maybeSingle();
     if (error) throw error;
-    if (!person) throw new Error('Không tìm thấy người này');
+    if (!person) throw new Error('Người này không còn tồn tại');
 
     tempOriginalPerson = person;
 
@@ -916,7 +939,7 @@ async function loadPersonForEdit(personId) {
 }
 
 /* ============================================
-   14. LƯU THÔNG TIN (SAVE PERSON) — v3.3
+   14. LƯU THÔNG TIN (SAVE PERSON) — v3.4.3
    ============================================ */
 async function savePerson() {
   if (!window.sbClient) {
@@ -924,7 +947,6 @@ async function savePerson() {
     return;
   }
 
-  // PHASE A: Viết hoa chữ cái đầu
   const fullNameRaw = document.getElementById('fullName').value.trim();
   if (!fullNameRaw) {
     alert('⚠️ Vui lòng nhập họ tên');
@@ -961,7 +983,7 @@ async function savePerson() {
       contact_info: getContactInfo()
     };
 
-    // v3.2 — KIỂM TRA TRÙNG
+    // Kiểm tra trùng khi thêm mới
     if (!currentEditingPersonId) {
       try {
         let query = window.sbClient
@@ -982,8 +1004,7 @@ async function savePerson() {
             '• Họ tên: ' + dup.full_name + '\n' +
             '• Năm sinh: ' + (dup.birth_year || '(không rõ)') + '\n' +
             '• Đời: ' + (dup.generation || '?') + '\n\n' +
-            'Vẫn muốn thêm "' + fullName + '" làm người MỚI không?\n' +
-            '(Nếu đây là cùng 1 người → bấm Cancel để về sửa người cũ)';
+            'Vẫn muốn thêm "' + fullName + '" làm người MỚI không?';
 
           if (!confirm(msg)) {
             saveBtns.forEach(b => { b.disabled = false; b.textContent = '💾 LƯU'; });
@@ -1042,12 +1063,8 @@ async function savePerson() {
       await createChildWithAutoCreate(child, personId, personGender);
     }
 
-    if (typeof window.loadAllPersons === 'function') {
-      await window.loadAllPersons();
-    }
-    if (typeof window.renderIdentityTab === 'function') {
-      window.renderIdentityTab();
-    }
+    // v3.4.3 — Refresh danh sách bằng loadAllData()
+    await refreshPersonList();
 
     alert('✅ Đã lưu thành công!\n\n' + fullName);
 
@@ -1078,7 +1095,10 @@ async function savePerson() {
 }
 
 /* ============================================
-   15. XÓA NGƯỜI — v3.1: XOÁ SẠCH
+   15. XÓA NGƯỜI — v3.4.3
+   - Lấy tên thật từ DB nếu cache null
+   - Xoá liên kết + person
+   - Refresh danh sách bằng loadAllData()
    ============================================ */
 async function deletePerson() {
   if (!currentEditingPersonId) {
@@ -1090,7 +1110,25 @@ async function deletePerson() {
     return;
   }
 
-  const name = tempOriginalPerson ? tempOriginalPerson.full_name : 'người này';
+  const personId = currentEditingPersonId;
+
+  // v3.4.3 — Lấy tên thật từ DB nếu tempOriginalPerson null
+  let name = tempOriginalPerson ? tempOriginalPerson.full_name : null;
+  let avatarUrl = tempOriginalPerson ? tempOriginalPerson.avatar_url : null;
+
+  if (!name) {
+    try {
+      const { data: p } = await window.sbClient
+        .from('persons').select('full_name, avatar_url').eq('id', personId).maybeSingle();
+      if (p) {
+        name = p.full_name;
+        avatarUrl = p.avatar_url;
+      }
+    } catch (err) {
+      console.warn('Không lấy được tên:', err);
+    }
+  }
+  if (!name) name = 'người này';
 
   const ok = confirm(
     '🗑️ XOÁ VĨNH VIỄN: "' + name + '"\n\n' +
@@ -1104,12 +1142,8 @@ async function deletePerson() {
   );
   if (!ok) return;
 
-  const personId = currentEditingPersonId;
-
   try {
-    const avatarPath = urlToStoragePath(
-      tempOriginalPerson ? tempOriginalPerson.avatar_url : null
-    );
+    const avatarPath = urlToStoragePath(avatarUrl);
 
     await window.sbClient.from('parent_child').delete()
       .or('parent_id.eq.' + personId + ',child_id.eq.' + personId);
@@ -1130,14 +1164,10 @@ async function deletePerson() {
         .catch(err => console.warn(err));
     }
 
-    alert('✅ Đã xoá "' + name + '"');
+    // v3.4.3 — Refresh danh sách ngay lập tức
+    await refreshPersonList();
 
-    if (typeof window.loadAllPersons === 'function') {
-      await window.loadAllPersons();
-    }
-    if (typeof window.renderIdentityTab === 'function') {
-      window.renderIdentityTab();
-    }
+    alert('✅ Đã xoá "' + name + '"');
 
     hideModal('personFormModal');
     document.body.style.overflow = '';
@@ -1281,4 +1311,4 @@ async function createChildWithAutoCreate(child, parentId, parentGender) {
    KẾT THÚC
    ============================================ */
 
-console.log('📝 Form.js v3.3 — Phase A: Viết hoa tên + Đậm gạch chân');
+console.log('📝 Form.js v3.4.3 — Fix refresh sau khi xoá/lưu');
