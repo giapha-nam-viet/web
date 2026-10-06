@@ -91,7 +91,7 @@
     
     <div class="card">
       <div class="toolbar">
-        <input type="text" id="searchInput" placeholder="🔍 Tìm tên (không dấu cũng được)..." class="search-input">
+        <input type="text" id="searchInput" placeholder="🔍 Tìm tên (không dấu cũng được)..." class="search-input" autocomplete="new-password" name="q_search_x9k2" readonly onfocus="this.removeAttribute('readonly'); this.value='';" onblur="if(!this.value) this.setAttribute('readonly', 'readonly');">
         <button class="btn btn--ghost" id="reorderToggleBtn">🔀 Sắp xếp thứ bậc</button>
         <button class="btn btn--primary" id="addPersonBtn">+ Thêm cá nhân</button>
       </div>
