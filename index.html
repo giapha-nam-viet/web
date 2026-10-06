@@ -16,6 +16,9 @@
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="form.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- 👇 THÊM MỚI: D3.js v7 cho Phả đồ -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
 </head>
 <body>
 
@@ -108,13 +111,27 @@
     </div>
   </section>
 
+  <!-- ==================== TAB PHẢ ĐỒ — ĐÃ CẬP NHẬT ==================== -->
   <section class="tab-content" id="tab-pha-do" style="display:none">
     <div class="banner">
       <img src="banner-pha-do.png" alt="Banner Phả đồ" onerror="this.style.display='none'">
       <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="openPersonForm()">+</button>
     </div>
-    <div class="card">
-      <p class="empty-state"><strong>Phả đồ đang được xây dựng.</strong><br>Sẽ hiển thị cây gia phả dạng đồ thị với các đường nối cha-con.</p>
+
+    <!-- 👇 THÊM MỚI: Khung phả đồ D3 -->
+    <div class="card" style="padding: 12px;">
+      <div class="pedigree-wrap">
+        <div class="pedigree-toolbar">
+          <button class="pedigree-btn" id="pedZoomIn"    title="Phóng to">＋</button>
+          <button class="pedigree-btn" id="pedZoomOut"   title="Thu nhỏ">−</button>
+          <button class="pedigree-btn" id="pedZoomReset" title="Về mặc định">⟲</button>
+          <button class="pedigree-btn" id="pedFocusMy"   title="Focus Phạm Văn Mỹ">★ Mỹ</button>
+          <span class="pedigree-hint">💡 Cuộn = zoom • Kéo = di chuyển • Đúp chuột = mở Danh tính</span>
+        </div>
+        <svg id="pedigree-svg"></svg>
+        <div id="pedigree-tooltip" class="pedigree-tooltip"></div>
+        <div id="pedigree-loading" class="pedigree-loading">Đang tải phả đồ...</div>
+      </div>
     </div>
   </section>
 
@@ -494,6 +511,9 @@ Phạm Văn Hải"></textarea>
 
 <script src="app.js"></script>
 <script src="form.js"></script>
+
+<!-- 👇 THÊM MỚI: Phả đồ -->
+<script src="pedigree.js"></script>
 
 </body>
 </html>
