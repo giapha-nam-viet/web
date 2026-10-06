@@ -5,6 +5,8 @@
    - v3.4: Tự động nhận diện huyết thống vs phối ngẫu
    - v3.4.4: role_type = Dâu/Rể → LUÔN ở cột phải
      (kể cả khi chưa có marriage) — có badge cảnh báo
+   - Phase B1: expose sbClient ra window.appSupabase
+     để pedigree.js dùng chung
    ============================================ */
 
 const SUPABASE_URL = 'https://bqojzghxgdkrfyhnvpku.supabase.co';
@@ -15,6 +17,7 @@ try {
   if (window.supabase && window.supabase.createClient) {
     sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     window.sbClient = sbClient;
+    window.appSupabase = sbClient;   // 👈 THÊM MỚI: expose cho pedigree.js
     console.log('✅ Đã kết nối Supabase');
   }
 } catch (err) {
