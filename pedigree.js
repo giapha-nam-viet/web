@@ -318,10 +318,27 @@ console.log('[Pedigree] ★ File loaded v3.0');
   }
 
   // ============ BOOT ============
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', setupTabListener);
-  } else {
+  // Boot: setup listener + auto-init nếu tab đã active
+  function boot() {
     setupTabListener();
+
+    // Nếu URL có #pha-do hoặc tab pha-do đang active sẵn → init ngay
+    setTimeout(() => {
+      const tab = document.querySelector('[data-tab="pha-do"]');
+      const section = document.getElementById('tab-pha-do');
+      const isActive = (tab && tab.classList.contains('tab--active')) ||
+                       (section && section.style.display !== 'none');
+      if (isActive) {
+        console.log('[Pedigree] Tab đã active sẵn → tự init');
+        init();
+      }
+    }, 500);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
   }
 
   window.Pedigree = { init, loadAndRender };
