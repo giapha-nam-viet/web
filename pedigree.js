@@ -436,6 +436,9 @@
     initialized = true;
 
     svg = d3.select('#pedigree-svg');
+    // Xoá sạch SVG trước khi vẽ (tránh chồng chéo khi init lại)
+    svg.selectAll('*').remove();
+
     tooltipEl = document.getElementById('pedigree-tooltip');
     loadingEl = document.getElementById('pedigree-loading');
 
@@ -488,13 +491,24 @@
     }
   }
 
+   let hookDone = false;
   function hookTab() {
-    const tabPhaDo = document.querySelector('[data-tab="pha-do"]');
-    if (tabPhaDo) tabPhaDo.addEventListener('click', () => setTimeout(init, 200));
-    const sec = document.getElementById('tab-pha-do');
-    if (sec && sec.style.display !== 'none') init();
-  }
+    if (hookDone) return;
+    hookDone = true;
 
+    const tabPhaDo = document.querySelector('[data-tab="pha-do"]');
+    if (tabPhaDo) {
+      tabPhaDo.addEventListener('click', () => {
+        // Chỉ init lần đầu, các lần sau chỉ reload data
+        if (!initialized) {
+          setTimeout(init, 200);
+        } else {
+          loadAndRender();
+        }
+      });
+    }
+    // Không tự init khi vào trang — chờ user click tab
+  }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', hookTab);
   } else {
