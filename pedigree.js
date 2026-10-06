@@ -27,7 +27,7 @@ console.log('[Pedigree] ★ File loaded v3.0');
     console.log('[Pedigree] ✓ Đã gắn listener cho tab Phả đồ');
     tab.addEventListener('click', () => {
       console.log('[Pedigree] Tab Phả đồ được click');
-      setTimeout(init, 300);
+           setTimeout(function() { init(); }, 300);
     });
   }
 
