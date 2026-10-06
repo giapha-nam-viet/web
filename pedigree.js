@@ -1,9 +1,10 @@
 /* ============================================================
-   pedigree.js — Phase B1 (v1.6)
+   pedigree.js — Phase B2 (v2.0)
    - Query focus theo full_name (KHÔNG hardcode ID)
-   - Node to hơn: 200x80
-   - Hiện full name (không rút gọn)
-   - Sort con theo sibling_order (lớn → nhỏ, trái → phải)
+   - Node to: 200x80, hiện full name
+   - Sort con theo sibling_order
+   - Màu node: #88a9ad (huyết thống) / #b4c8ca (phối ngẫu)
+   - Đường nối phân biệt 5 loại con + Legend
    ============================================================ */
 (function () {
   'use strict';
@@ -104,7 +105,7 @@
     if (!focus) throw new Error('Không tìm thấy "' + FOCUS_NAME + '" trong DB');
 
     FOCUS_ID = focus.id;
-    console.log('[Pedigree] ✓ Tìm thấy:', focus.full_name, '| ID thật:', FOCUS_ID, '| độ dài ID:', FOCUS_ID.length);
+    console.log('[Pedigree] ✓ Tìm thấy:', focus.full_name, '| ID thật:', FOCUS_ID);
 
     // Cha mẹ
     const pcParentsRes = await queryArray(sb, 'parent_child',
@@ -131,16 +132,31 @@
       spouse = (spRes.data || [])[0] || null;
     }
 
-    // Con — v1.6: sort theo sibling_order, fallback birth_year, cuối cùng tên
+    // Con — v2.0: lấy relation + parent_role
     const pcChildRes = await queryArray(sb, 'parent_child',
       q => q.eq('parent_id', FOCUS_ID), 5
     );
     const pcChildren = pcChildRes.data || [];
+
+    const childRelMap = {};
+    pcChildren.forEach(r => {
+      childRelMap[r.child_id] = {
+        relation: r.relation || 'Con chung',
+        parent_role: r.parent_role || 'Bố'
+      };
+    });
+
     const childIds = pcChildren.map(r => r.child_id);
     let children = [];
     if (childIds.length) {
       const csRes = await queryArray(sb, 'persons', q => q.in('id', childIds), 4);
-      children = (csRes.data || []).sort((a, b) => {
+      children = (csRes.data || []).map(c => {
+        const rel = childRelMap[c.id] || {};
+        return Object.assign({}, c, {
+          relation: rel.relation || 'Con chung',
+          parent_role: rel.parent_role || 'Bố'
+        });
+      }).sort((a, b) => {
         const aOrder = a.sibling_order != null ? a.sibling_order : 9999;
         const bOrder = b.sibling_order != null ? b.sibling_order : 9999;
         if (aOrder !== bOrder) return aOrder - bOrder;
@@ -151,7 +167,7 @@
       });
     }
 
-    console.log('[Pedigree] ✓ Load xong: Mỹ=' + focus.full_name +
+    console.log('[Pedigree] ✓ Load xong: ' + focus.full_name +
                 ' | cha mẹ=' + parents.length +
                 ' | vợ/chồng=' + (spouse ? 1 : 0) +
                 ' | con=' + children.length);
@@ -193,10 +209,45 @@
 
     if (parentList.length) links.push({ type: 'blood', from: 'parentsCenter', to: focus.id });
     if (spouse) links.push({ type: 'marriage', from: focus.id, to: spouse.id, direct: true });
-    children.forEach(c => links.push({ type: 'blood', from: 'coupleCenter', to: c.id }));
+
+    // v2.0: Đường nối con phân biệt theo relation
+    children.forEach(c => {
+      const relation = (c.relation || 'Con chung').toLowerCase();
+      let linkType = 'child-chung';
+      let fromAnchor = 'coupleCenter';
+
+      if (relation.includes('riêng ngoài') || relation.includes('ngoài huyết thống')) {
+        linkType = 'child-ngoai-huyet-thong';
+        fromAnchor = (c.parent_role === 'Bố') ? 'focus' : 'spouse';
+      } else if (relation.includes('nuôi')) {
+        linkType = 'child-nuoi';
+        fromAnchor = (c.parent_role === 'Bố') ? 'focus' : 'spouse';
+      } else if (relation.includes('giá thú')) {
+        linkType = 'child-ngoai-gia-thu';
+        fromAnchor = (c.parent_role === 'Bố') ? 'focus' : 'spouse';
+      } else if (relation.includes('riêng')) {
+        linkType = 'child-rieng';
+        fromAnchor = (c.parent_role === 'Bố') ? 'focus' : 'spouse';
+      } else {
+        linkType = 'child-chung';
+        fromAnchor = 'coupleCenter';
+      }
+
+      links.push({
+        type: 'blood',
+        linkType: linkType,
+        from: fromAnchor,
+        to: c.id
+      });
+    });
 
     gLinks.selectAll('path').data(links).enter().append('path')
-      .attr('class', d => 'ped-link ' + (d.type === 'marriage' ? 'marriage' : ''))
+      .attr('class', d => {
+        let cls = 'ped-link';
+        if (d.type === 'marriage') cls += ' marriage';
+        if (d.linkType) cls += ' ' + d.linkType;
+        return cls;
+      })
       .attr('d', d => computePath(d, nodes));
 
     const nodeSel = gNodes.selectAll('g.ped-node')
@@ -244,6 +295,7 @@
       const midY = (cy + childTopY) / 2;
       return 'M ' + cx + ' ' + cy + ' L ' + cx + ' ' + midY + ' L ' + child.x + ' ' + midY + ' L ' + child.x + ' ' + childTopY;
     }
+
     if (link.from === 'coupleCenter' && link.to) {
       const child = get(link.to);
       if (!child) return '';
@@ -254,6 +306,24 @@
       const midY = (cy + childTopY) / 2;
       return 'M ' + cx + ' ' + cy + ' L ' + cx + ' ' + midY + ' L ' + child.x + ' ' + midY + ' L ' + child.x + ' ' + childTopY;
     }
+
+    // v2.0: Nối từ 1 bên (focus hoặc spouse)
+    if ((link.from === 'focus' || link.from === 'spouse') && link.to) {
+      const child = get(link.to);
+      if (!child) return '';
+      const anchor = nodes.find(n => {
+        if (link.from === 'focus') return n.kind === 'focus';
+        if (link.from === 'spouse') return n.kind === 'spouse';
+        return false;
+      });
+      if (!anchor) return '';
+      const px = anchor.x;
+      const py = anchor.y + NODE_H / 2;
+      const childTopY = child.y - NODE_H / 2;
+      const midY = (py + childTopY) / 2;
+      return 'M ' + px + ' ' + py + ' L ' + px + ' ' + midY + ' L ' + child.x + ' ' + midY + ' L ' + child.x + ' ' + childTopY;
+    }
+
     if (link.direct && link.from && link.to) {
       const a = get(link.from), b = get(link.to);
       if (!a || !b) return '';
@@ -287,8 +357,9 @@
 
   function showTooltip(event, d) {
     const p = d.person;
+    const relInfo = p.relation ? '<br>Quan hệ: <strong>' + p.relation + '</strong>' : '';
     tooltipEl.innerHTML =
-      '<strong style="color:#C49504">' + (p.full_name || '?') + '</strong><br>' +
+      '<strong style="color:#C49504">' + (p.full_name || '?') + '</strong>' + relInfo + '<br>' +
       'Đời: ' + (p.generation || '?') + ' • Nhánh: ' + (p.branch || '?') + '<br>' +
       'Giới tính: ' + (p.gender || '?') + '<br>' +
       'Sinh: ' + (p.birth_year || '?') + (p.death_year ? ' • Mất: ' + p.death_year : '') + '<br>' +
@@ -298,7 +369,7 @@
     tooltipEl.style.left = (event.clientX - rect.left + 12) + 'px';
     tooltipEl.style.top  = (event.clientY - rect.top  + 12) + 'px';
     clearTimeout(showTooltip._t);
-    showTooltip._t = setTimeout(() => { tooltipEl.style.display = 'none'; }, 3500);
+    showTooltip._t = setTimeout(() => { tooltipEl.style.display = 'none'; }, 4000);
   }
 
   function openInDanhTinh(personId) {
@@ -312,6 +383,52 @@
         }
       });
     }, 200);
+  }
+
+  function drawLegend() {
+    // Xoá legend cũ nếu có
+    svg.selectAll('.ped-legend').remove();
+
+    const legend = svg.append('g')
+      .attr('class', 'ped-legend')
+      .attr('transform', 'translate(20, 20)');
+
+    const legendItems = [
+      { color: '#bd9733', dash: null,  label: 'Con chung' },
+      { color: '#bd9733', dash: null,  label: 'Con riêng (huyết thống)' },
+      { color: '#bd9733', dash: '6 4', label: 'Con ngoài giá thú' },
+      { color: '#01285E', dash: '4 3', label: 'Con nuôi' },
+      { color: '#999999', dash: '2 4', label: '🔒 Con riêng ngoài huyết thống' }
+    ];
+
+    const boxH = legendItems.length * 22 + 20;
+    const boxW = 260;
+
+    legend.append('rect')
+      .attr('x', -8).attr('y', -8)
+      .attr('width', boxW).attr('height', boxH)
+      .attr('fill', 'rgba(255, 255, 255, 0.92)')
+      .attr('stroke', '#88a9ad')
+      .attr('stroke-width', 1.5)
+      .attr('rx', 8).attr('ry', 8);
+
+    legendItems.forEach((item, i) => {
+      const y = i * 22 + 8;
+      const line = legend.append('line')
+        .attr('x1', 0).attr('y1', y)
+        .attr('x2', 32).attr('y2', y)
+        .attr('stroke', item.color)
+        .attr('stroke-width', 2.5);
+      if (item.dash) line.attr('stroke-dasharray', item.dash);
+
+      legend.append('text')
+        .attr('x', 40).attr('y', y + 4)
+        .attr('font-size', '12px')
+        .attr('font-family', 'Be Vietnam Pro, sans-serif')
+        .attr('fill', '#01285E')
+        .attr('font-weight', '500')
+        .text(item.label);
+    });
   }
 
   async function init() {
@@ -328,8 +445,21 @@
 
     zoomBehavior = d3.zoom()
       .scaleExtent([0.2, 2.5])
-      .on('zoom', (e) => gRoot.attr('transform', e.transform));
+      .on('zoom', (e) => {
+        gRoot.attr('transform', e.transform);
+        // Legend cũng di chuyển theo scale nhưng ở góc cố định
+        const legend = svg.select('.ped-legend');
+        if (!legend.empty()) {
+          const scale = e.transform.k;
+          legend.attr('transform',
+            'translate(' + (20 / scale) + ', ' + (20 / scale) + ') scale(' + (1 / scale) + ')'
+          );
+        }
+      });
     svg.call(zoomBehavior);
+
+    // Vẽ legend 1 lần duy nhất
+    drawLegend();
 
     const zIn = document.getElementById('pedZoomIn');
     const zOut = document.getElementById('pedZoomOut');
