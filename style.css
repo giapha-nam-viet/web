@@ -893,11 +893,89 @@ body.reorder-mode .person-mini:hover {
   border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
 }
+/* ============================================
+   PHẢ ĐỒ (Phase B1 v1.7) — màu xám xanh cho huyết thống/phối ngẫu
+   ============================================ */
+.pedigree-wrap {
+  position: relative;
+  width: 100%;
+  height: calc(100vh - 260px);
+  min-height: 520px;
+  background: linear-gradient(180deg, #FDFCF7 0%, #FFF9E6 100%);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 2px solid var(--accent);
+}
 
-/* Node phả đồ — nền kem + viền vàng đồng */
+#pedigree-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+}
+#pedigree-svg:active { cursor: grabbing; }
+
+.pedigree-toolbar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: rgba(1, 40, 94, 0.94);
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 14px rgba(1, 40, 94, 0.35);
+  flex-wrap: wrap;
+  max-width: calc(100% - 24px);
+}
+
+.pedigree-btn {
+  background: var(--accent);
+  color: #FFFFFF;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 14px;
+  min-width: 36px;
+  transition: transform .15s ease, background .15s ease;
+  font-family: inherit;
+}
+.pedigree-btn:hover {
+  transform: scale(1.08);
+  background: var(--accent-dark);
+}
+
+.pedigree-hint {
+  color: #F5EEB3;
+  font-size: 12px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+.pedigree-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--text-main);
+  font-size: 16px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 14px 24px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+}
+
+/* ============ NODE PHẢ ĐỒ — XÁM XANH ============ */
+
+/* Mặc định = huyết thống (#88a9ad) */
 .ped-node rect {
-  fill: #FFFDF5;
-  stroke: #bd9733;
+  fill: #F5FAFA;
+  stroke: #88a9ad;
   stroke-width: 2.5px;
   rx: 10;
   ry: 10;
@@ -905,46 +983,55 @@ body.reorder-mode .person-mini:hover {
   filter: drop-shadow(0 2px 4px rgba(1, 40, 94, 0.10));
 }
 .ped-node:hover rect {
-  fill: #FFF8E1;
-  stroke: #8B6D00;
+  fill: #EAF3F4;
+  stroke: #5A7C80;
   stroke-width: 3px;
-  filter: drop-shadow(0 4px 10px rgba(189, 151, 51, 0.4));
+  filter: drop-shadow(0 4px 10px rgba(90, 124, 128, 0.4));
 }
 
-/* ⭐ FOCUS NODE (Phạm Văn Mỹ) — vàng đậm + viền navy dày */
+/* ⭐ FOCUS NODE — cùng màu #88a9ad nhưng có bóng mờ vàng xung quanh */
 .ped-node.focus rect {
-  fill: #FFE9A8;
-  stroke: #01285E;
-  stroke-width: 4px;
-  filter: drop-shadow(0 4px 12px rgba(1, 40, 94, 0.35));
+  fill: #EAF3F4;
+  stroke: #88a9ad;
+  stroke-width: 3.5px;
+  filter: drop-shadow(0 0 12px rgba(196, 149, 4, 0.65))
+          drop-shadow(0 4px 8px rgba(136, 169, 173, 0.5));
 }
 .ped-node.focus:hover rect {
-  fill: #FFDF88;
-  stroke: #01285E;
+  fill: #DCEAEC;
+  stroke: #5A7C80;
+  stroke-width: 4px;
+  filter: drop-shadow(0 0 16px rgba(196, 149, 4, 0.85))
+          drop-shadow(0 4px 10px rgba(90, 124, 128, 0.6));
 }
 
-/* Node CHA MẸ — nền xanh navy nhạt */
+/* Cha mẹ — cùng tông huyết thống */
 .ped-node.parent rect {
-  fill: #E8EFF9;
-  stroke: #4A6790;
+  fill: #F5FAFA;
+  stroke: #88a9ad;
   stroke-width: 2.5px;
 }
 
-/* Node VỢ / CHỒNG — nền hồng san hô nhạt */
+/* Phối ngẫu (vợ/chồng, dâu/rể) — #b4c8ca */
 .ped-node.spouse rect {
-  fill: #FFEEEE;
-  stroke: #C97A7A;
+  fill: #F8FBFB;
+  stroke: #b4c8ca;
   stroke-width: 2.5px;
 }
+.ped-node.spouse:hover rect {
+  fill: #EEF5F5;
+  stroke: #88a9ad;
+  stroke-width: 3px;
+}
 
-/* Node CON — kem nhạt */
+/* Con — cùng tông huyết thống */
 .ped-node.child rect {
-  fill: #FFFDF5;
-  stroke: #bd9733;
+  fill: #F5FAFA;
+  stroke: #88a9ad;
   stroke-width: 2.5px;
 }
 
-/* Text trong node — navy rõ, font to hơn */
+/* Text trong node */
 .ped-node text {
   fill: #01285E;
   font-family: 'Be Vietnam Pro', 'Inter', sans-serif;
@@ -968,13 +1055,12 @@ body.reorder-mode .person-mini:hover {
   font-weight: 700;
 }
 
-/* Focus node — text đậm hơn */
 .ped-node.focus .name {
   font-size: 16px;
   fill: #01285E;
 }
 
-/* Link phả đồ */
+/* Link phả đồ — GIỮ màu vàng đồng hiện tại */
 .ped-link {
   fill: none;
   stroke: #bd9733;
@@ -986,7 +1072,7 @@ body.reorder-mode .person-mini:hover {
   stroke-dasharray: 6 4;
 }
 
-/* Tooltip phả đồ */
+/* Tooltip */
 .pedigree-tooltip {
   position: absolute;
   display: none;
@@ -1013,3 +1099,4 @@ body.reorder-mode .person-mini:hover {
   .ped-node .name { font-size: 14px; }
   .ped-node .years { font-size: 12px; }
 }
+
