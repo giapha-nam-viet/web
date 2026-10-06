@@ -159,7 +159,8 @@
 
   function render(data) {
     const { focus, parents, spouse, children } = data;
-    gRoot.selectAll('*').remove();
+gLinks.selectAll('*').remove();
+gNodes.selectAll('*').remove();
 
     const nodes = [];
     const links = [];
