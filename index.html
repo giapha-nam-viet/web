@@ -14,10 +14,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
   
   <link rel="stylesheet" href="style.css">
-<script src="pedigree.js?v=9"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="form.css">
 
-  <!-- 👇 THÊM MỚI: D3.js v7 cho Phả đồ -->
+  <!-- Supabase + D3 — load trước ở <head> -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://d3js.org/d3.v7.min.js"></script>
 </head>
 <body>
@@ -111,14 +111,13 @@
     </div>
   </section>
 
-  <!-- ==================== TAB PHẢ ĐỒ — ĐÃ CẬP NHẬT ==================== -->
+  <!-- ==================== TAB PHẢ ĐỒ ==================== -->
   <section class="tab-content" id="tab-pha-do" style="display:none">
     <div class="banner">
       <img src="banner-pha-do.png" alt="Banner Phả đồ" onerror="this.style.display='none'">
       <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="openPersonForm()">+</button>
     </div>
 
-    <!-- 👇 THÊM MỚI: Khung phả đồ D3 -->
     <div class="card" style="padding: 12px;">
       <div class="pedigree-wrap">
         <div class="pedigree-toolbar">
@@ -511,9 +510,7 @@ Phạm Văn Hải"></textarea>
 
 <script src="app.js"></script>
 <script src="form.js"></script>
-
-<!-- 👇 THÊM MỚI: Phả đồ -->
-<script src="pedigree.js?v=3"></script>
+<script src="pedigree.js?v=9"></script>
 
 </body>
 </html>
