@@ -1,22 +1,24 @@
 /* ============================================================
-   pedigree.js v5.1 — Lớp 1: Phả đồ phổ quát (layout DỌC)
-   Schema thật: persons, parent_child, marriages
-   - role_type: 'Huyết thống' | 'Dâu/Rể'
-   - special_status: 'Bình thường' | 'Không rõ' | 'Mất sớm'
-   - parent_role: 'Bố' | 'Mẹ'
+   pedigree.js v5.2 — Layout DỌC đơn giản hoá
+   - Cột = birth_order (Đời 2: 7 cột, Đời 3: 10 cột)
+   - Không còn phụ thuộc branch cho layout
+   - Sort con theo birth_order (fallback sibling_order)
+   - Huyết thống: viền đậm #88a9ad | Phối ngẫu: viền nhạt #b4c8ca
+   - special_status 'Mất sớm'/'Không rõ' → mờ + chú thích
+   - Auto-focus Phạm Văn Mỹ
    ============================================================ */
 (function () {
   'use strict';
   const LOG = '[Pedigree]';
-  console.log(LOG, 'v5.1 loaded');
+  console.log(LOG, 'v5.2 loaded');
 
   // ---------- CONFIG ----------
   const CFG = {
-    node:    { w: 180, h: 56 },
-    gapX:    60,
-    gapY:    90,
-    padding: 80,
-    spouseGap: 6,        // khoảng cách giữa các node trong khối hôn nhân
+    node:      { w: 180, h: 56 },
+    gapX:      30,           // khoảng cách cột (Đời 3 có 10 con → thu hẹp)
+    gapY:      90,
+    padding:   60,
+    spouseGap: 8,
     colors: {
       blood:  { stroke: '#88a9ad', fill: '#F5FAFA' },
       spouse: { stroke: '#b4c8ca', fill: '#F8FBFB' },
@@ -37,7 +39,6 @@
 
   // ---------- HELPERS ----------
   function isBlood(p) { return p && p.role_type === 'Huyết thống'; }
-  function isSpouse(p) { return p && p.role_type === 'Dâu/Rể'; }
   function isFaded(p) {
     return p && (p.special_status === 'Mất sớm' || p.special_status === 'Không rõ');
   }
@@ -46,6 +47,9 @@
     if (p.special_status === 'Mất sớm') return 'mất sớm';
     if (p.special_status === 'Không rõ') return 'thất lạc';
     return '';
+  }
+  function sortKey(p) {
+    return p?.birth_order ?? p?.sibling_order ?? 9999;
   }
 
   // ---------- ENTRY ----------
@@ -92,11 +96,9 @@
     console.log(LOG, 'buildTree...');
     const byId = new Map(persons.map(p => [String(p.id), p]));
 
-    // childrenOf: parentId → [childId]  (chỉ 1 role/1 con)
-    // Ưu tiên Bố; nếu không có Bố thì dùng Mẹ
+    // childrenOf: parentId → [childId]
     const childrenOf = new Map();
     const parentsOf = new Map();
-    // Gom 2 nhóm theo child
     const childToFather = new Map();
     const childToMother = new Map();
     pcLinks.forEach(l => {
@@ -105,14 +107,12 @@
       if (l.parent_role === 'Bố') childToFather.set(cid, pid);
       else if (l.parent_role === 'Mẹ') childToMother.set(cid, pid);
     });
-    // Xác định parent chính cho mỗi con
     const allChildren = new Set([...childToFather.keys(), ...childToMother.keys()]);
     allChildren.forEach(cid => {
       const pid = childToFather.get(cid) || childToMother.get(cid);
       if (!pid) return;
       if (!childrenOf.has(pid)) childrenOf.set(pid, []);
       childrenOf.get(pid).push(cid);
-      // parentsOf: nếu có cả Bố lẫn Mẹ, lưu cả 2
       const arr = [];
       if (childToFather.has(cid)) arr.push(childToFather.get(cid));
       if (childToMother.has(cid)) arr.push(childToMother.get(cid));
@@ -131,59 +131,42 @@
       spousesOf.get(w).push({ spouseId: h, order: ord });
     });
 
-    // Cụ tổ: generation nhỏ nhất + không có parentsOf
+    // Cụ tổ
     const rootsAll = persons.filter(p => !parentsOf.has(String(p.id)));
     rootsAll.sort((a, b) => (a.generation || 0) - (b.generation || 0));
     if (!rootsAll.length) return null;
     const minGen = rootsAll[0].generation || 1;
-    // Chỉ lấy cụ tổ là huyết thống, generation = minGen
     const rootPersons = rootsAll.filter(p => (p.generation || 0) === minGen && isBlood(p));
-    if (!rootPersons.length) {
-      // fallback: nếu không có huyết thống, lấy người đầu
-      rootPersons.push(rootsAll[0]);
-    }
+    if (!rootPersons.length) rootPersons.push(rootsAll[0]);
 
-    // Chi (branch) — từ persons có branch, không NULL
+    // Chi (chỉ để filter dropdown)
     const branchSet = new Set();
     persons.forEach(p => { if (p.branch && p.branch.trim()) branchSet.add(p.branch.trim()); });
     const branches = Array.from(branchSet).sort();
 
-    console.log(LOG, `tree: ${rootPersons.length} roots, ${branches.length} branches:`, branches);
+    console.log(LOG, `tree: ${rootPersons.length} roots, ${branches.length} branches`);
     return { byId, childrenOf, parentsOf, spousesOf, roots: rootPersons, branches, minGen };
   }
 
   // ---------- 3) COMPUTE LAYOUT ----------
   function computeLayout(tree) {
     console.log(LOG, 'computeLayout...');
-    const { byId, childrenOf, parentsOf, spousesOf, roots, branches, minGen } = tree;
+    const { byId, childrenOf, spousesOf, roots, minGen } = tree;
     const NW = CFG.node.w, NH = CFG.node.h;
     const stepX = NW + CFG.gapX;
     const stepY = NH + CFG.gapY;
-
-    // Cột theo chi
-    const colOfBranch = new Map();
-    branches.forEach((b, i) => colOfBranch.set(b, i));
-    // Cột "Tổ" (Đời 1) đứng riêng bên trái
-    // Con của cụ tổ sẽ nằm ở các cột chi tương ứng
-
-    function colOf(p) {
-      if (!p) return 0;
-      if ((p.generation || 0) <= minGen) return -1; // Đời 1 không thuộc chi nào
-      if (p.branch && colOfBranch.has(p.branch)) return colOfBranch.get(p.branch);
-      return branches.length; // cột "Khác"
-    }
 
     const nodes = [];
     const links = [];
     const placed = new Set();
 
-    // Đặt 1 người + vợ/chồng (block hôn nhân)
+    // Đặt 1 người + vợ/chồng + con (đệ quy)
     function placePerson(p, x, yTop) {
       if (!p || placed.has(String(p.id))) return;
       const spouses = (spousesOf.get(String(p.id)) || [])
         .sort((a, b) => (a.order || 0) - (b.order || 0));
 
-      // Chồng / người huyết thống
+      // Chồng / huyết thống
       nodes.push({
         id: String(p.id), person: p, spouse: null,
         x, y: yTop, w: NW, h: NH,
@@ -207,52 +190,46 @@
 
       const blockBottom = yCur;
 
-      // Con — gom theo cột chi
+      // Con — sort theo birth_order
       const childIds = (childrenOf.get(String(p.id)) || [])
         .map(cid => byId.get(cid))
-        .filter(Boolean);
-      // Dedupe con theo cột: 1 con/1 cột
-      const seenCol = new Set();
-      const byCol = new Map();
-      childIds.forEach(c => {
-        const col = colOf(c);
-        if (!byCol.has(col)) byCol.set(col, []);
-        byCol.get(col).push(c);
-      });
+        .filter(Boolean)
+        .sort((a, b) => sortKey(a) - sortKey(b));
 
-byCol.forEach(arr => arr.sort((a, b) => {
-  const ao = a.birth_order ?? a.sibling_order ?? 9999;
-  const bo = b.birth_order ?? b.sibling_order ?? 9999;
-  return ao - bo;
-}));
+      if (!childIds.length) return;
 
-      // Tính vị trí con: cột * stepX, hàng dưới
-      const sortedCols = Array.from(byCol.keys()).sort((a, b) => a - b);
-      sortedCols.forEach(col => {
-        const kids = byCol.get(col);
-        const cx = (col === -1 ? 0 : col) * stepX + CFG.padding;
-        // Con cùng cột nhưng khác chi → xếp cùng hàng, mở rộng cột
-        kids.forEach((c, idx) => {
-          const childX = cx + idx * (NW + 8);
-          const childY = blockBottom + CFG.gapY - NH;
-          // Link từ đáy khối hôn nhân
-          links.push({
-            from: { x: x + NW / 2, y: blockBottom },
-            to: { x: childX + NW / 2, y: childY },
-            type: 'blood'
-          });
-          placePerson(c, childX, childY);
+      // Xác định baseX: cột của con đầu tiên = birth_order - 1
+      // Nếu con đầu tiên có birth_order = 1 → baseX = padding
+      // Nếu con đầu tiên có birth_order = 3 → baseX = padding + 2*stepX
+      const firstBO = sortKey(childIds[0]);
+      const baseX = CFG.padding + Math.max(0, (firstBO - 1)) * stepX;
+
+      // Đặt con theo birth_order
+      childIds.forEach((c, idx) => {
+        const bo = sortKey(c);
+        // Cột = birth_order - 1 (nếu có), fallback theo idx
+        const colIdx = (bo < 9999) ? (bo - 1) : (firstBO - 1 + idx);
+        const cx = CFG.padding + colIdx * stepX;
+        const cy = blockBottom + CFG.gapY;
+
+        // Link từ đáy khối hôn nhân → con
+        links.push({
+          from: { x: x + NW / 2, y: blockBottom },
+          to: { x: cx + NW / 2, y: cy },
+          type: 'blood'
         });
+
+        placePerson(c, cx, cy);
       });
     }
 
-    // Đặt từng cụ tổ
+    // Đặt cụ tổ
     roots.forEach((r, i) => {
-      const x = i * (NW + 40) + 20;
+      const x = CFG.padding + i * (NW + 40);
       placePerson(r, x, CFG.padding);
     });
 
-    // Link hôn nhân (đường dọc nối chồng-vợ trong cùng block)
+    // Link hôn nhân
     nodes.forEach(n => {
       if (n.type !== 'spouse') return;
       const husbandNode = nodes.find(m => m.id === String(n.spouse && n.spouse.id));
@@ -284,7 +261,6 @@ byCol.forEach(arr => arr.sort((a, b) => {
         .attr('viewBox', `0 0 ${width} ${height}`)
         .attr('preserveAspectRatio', 'xMidYMid meet');
 
-      // glow
       const defs = svg.append('defs');
       const glow = defs.append('filter').attr('id', 'focus-glow');
       glow.append('feGaussianBlur').attr('stdDeviation', '5').attr('result', 'blur');
@@ -350,7 +326,6 @@ byCol.forEach(arr => arr.sort((a, b) => {
           return '';
         });
 
-      // Label thất lạc/mất sớm
       node.filter(d => isFaded(d.person)).append('text')
         .attr('x', d => d.w / 2).attr('y', d => d.h - 4)
         .attr('text-anchor', 'middle')
