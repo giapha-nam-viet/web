@@ -1,1314 +1,561 @@
-/* ============================================
-   FORM LOGIC - GIA PHẢ NAM VIỆT (v3.4.3)
-   - 2 tầng: Xem + Sửa
-   - Nút "Đến Phả đồ"
-   - B3: Upload avatar lên Supabase Storage
-   - v3.1: Nút XOÁ xoá sạch
-   - v3.2: Chặn trùng khi thêm mới
-   - v3.3: Phase A — viết hoa + đậm gạch chân
-   - v3.4.3: Fix refresh sau xoá/lưu (dùng loadAllData)
-   ============================================ */
+/* ============================================================
+   form.js v4.0 — Form nhập liệu với Autocomplete Bố/Mẹ
+   - Autocomplete Bố/Mẹ: gõ tên → gợi ý
+   - Tạo mới person nếu chưa có (generation = hiện tại - 1)
+   - Giữ nguyên chức năng: view, edit, avatar, spouse
+   - Đồng bộ schema: parent_child (parent_role = 'Bố'/'Mẹ')
+   ============================================================ */
+(function () {
+  'use strict';
+  const LOG = '[Form]';
+  console.log(LOG, 'v4.0 loaded');
 
-let currentEditingPersonId = null;
-let currentViewMode = 'view';
-let tempChildrenList = [];
-let tempAvatarData = null;
-let currentEditingAvatarPath = null;
-let cropper = null;
-let tempLinkedNoteIds = [];
-let allNotesCache = [];
-let tempOriginalPerson = null;
+  // ---------- STATE ----------
+  let sb;
+  let currentEditingPersonId = null;
+  let currentViewMode = 'view';
+  let tempAvatarData = null;
+  let currentEditingAvatarPath = null;
+  let tempChildLinks = [];    // [{role: 'Bố'|'Mẹ', name: ''}]
+  let tempOriginalPerson = null;
+  let allPersonsCache = [];   // cache để autocomplete
 
-/* ============================================
-   PHASE A — Chuẩn hoá tên: viết hoa chữ cái đầu
-   ============================================ */
-function capitalizeVietnameseName(str) {
-  if (!str || typeof str !== 'string') return '';
-  return str
-    .trim()
-    .replace(/\s+/g, ' ')
-    .split(' ')
-    .filter(w => w)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
-}
+  // ---------- HELPERS ----------
+  function $(id) { return document.getElementById(id); }
 
-/* ============================================
-   B3 — HELPER: Public URL → Storage path
-   ============================================ */
-function urlToStoragePath(publicUrl) {
-  if (!publicUrl || typeof publicUrl !== 'string') return null;
-  const marker = '/storage/v1/object/public/avatars/';
-  const idx = publicUrl.indexOf(marker);
-  if (idx === -1) return null;
-  return publicUrl.substring(idx + marker.length);
-}
+  function escHtml(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
 
-/* ============================================
-   v3.4.3 — HELPER: Refresh danh sách
-   Gọi loadAllData() trong app.js
-   ============================================ */
-async function refreshPersonList() {
-  try {
-    if (typeof window.loadAllData === 'function') {
-      await window.loadAllData();
-    } else if (typeof loadAllData === 'function') {
-      await loadAllData();
+  function normalize(s) {
+    return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd').replace(/Đ/g, 'D');
+  }
+
+  function getSupabase() {
+    return window.appSupabase || window.sbClient;
+  }
+
+  // ---------- OPEN PERSON FORM ----------
+  window.openPersonForm = function (personId) {
+    console.log(LOG, 'openPersonForm', personId);
+    sb = getSupabase();
+    currentEditingPersonId = personId || null;
+    tempChildLinks = [];
+    tempAvatarData = null;
+    currentEditingAvatarPath = null;
+    tempOriginalPerson = null;
+
+    const title = $('formTitle');
+    if (personId) {
+      if (title) title.textContent = 'THÔNG TIN CÁ NHÂN';
+      currentViewMode = 'view';
+      showViewMode(personId);
     } else {
-      console.warn('⚠️ Không tìm thấy loadAllData() để refresh danh sách');
+      if (title) title.textContent = 'THÊM CÁ NHÂN MỚI';
+      currentViewMode = 'edit';
+      resetForm();
+      showEditMode();
+      autofillCreatedByName();
     }
-  } catch (err) {
-    console.error('Lỗi refresh list:', err);
+
+    // Hiện modal
+    const modal = $('personModal');
+    if (modal) modal.style.display = 'flex';
+  };
+
+  window.closePersonForm = function () {
+    const modal = $('personModal');
+    if (modal) modal.style.display = 'none';
+    currentEditingPersonId = null;
+    tempAvatarData = null;
+    tempChildLinks = [];
+  };
+
+  // ---------- RESET FORM ----------
+  function resetForm() {
+    const fields = ['personName', 'personGender', 'personGeneration',
+                    'personBirthYear', 'personDeathYear', 'personBranch',
+                    'personHometown', 'personOccupation', 'personBio'];
+    fields.forEach(id => { const el = $(id); if (el) el.value = ''; });
+    tempAvatarData = null;
+    tempChildLinks = [];
+    renderAvatarPreview();
+    renderChildLinks();
   }
-}
 
-/* ============================================
-   HÀM HIỆN / ẨN FORM
-   ============================================ */
-function showModal(modalId) {
-  const modal = document.getElementById(modalId);
-  if (modal) modal.classList.add('is-visible');
-}
+  // ---------- AUTOFILL CREATED BY ----------
+  function autofillCreatedByName() {
+    try {
+      const el = $('personCreatedBy');
+      if (!el) return;
+      const session = JSON.parse(localStorage.getItem('sb-session') || '{}');
+      const email = session?.user?.email || 'hsnampham@gmail.com';
+      el.value = email;
+    } catch (e) { console.warn(LOG, 'autofillCreatedBy fail', e); }
+  }
 
-function hideModal(modalId) {
-  const modal = document.getElementById(modalId);
-  if (modal) modal.classList.remove('is-visible');
-}
+  // ---------- SHOW VIEW MODE ----------
+  async function showViewMode(personId) {
+    try {
+      sb = getSupabase();
+      const viewBody = $('personViewBody');
+      const editBody = $('personEditBody');
+      if (viewBody) viewBody.style.display = 'block';
+      if (editBody) editBody.style.display = 'none';
 
-function hideAllModals() {
-  document.querySelectorAll('.form-modal').forEach(m => m.classList.remove('is-visible'));
-  document.body.style.overflow = '';
-}
+      const { data: person, error } = await sb
+        .from('persons').select('*').eq('id', personId).single();
+      if (error) throw error;
+      tempOriginalPerson = person;
 
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape' || e.keyCode === 27) hideAllModals();
-});
+      // Load spouse
+      const { data: marr } = await sb.from('marriages')
+        .select('*').or(`husband_id.eq.${personId},wife_id.eq.${personId}`);
+      const spouseIds = (marr || []).map(m => m.husband_id === personId ? m.wife_id : m.husband_id);
+      let spouseNames = [];
+      if (spouseIds.length) {
+        const { data: sps } = await sb.from('persons').select('id, full_name').in('id', spouseIds);
+        spouseNames = (sps || []).map(s => s.full_name);
+      }
 
-/* ============================================
-   1. MỞ / ĐÓNG FORM — 2 TẦNG
-   ============================================ */
-function openPersonForm(personId) {
-  currentEditingPersonId = personId || null;
-  tempChildrenList = [];
-  tempAvatarData = null;
-  currentEditingAvatarPath = null;
-  tempLinkedNoteIds = [];
-  tempOriginalPerson = null;
+      // Load parents
+      const { data: pc } = await sb.from('parent_child')
+        .select('*').eq('child_id', personId);
+      let fatherName = '', motherName = '';
+      if (pc && pc.length) {
+        const parentIds = pc.map(p => p.parent_id);
+        const { data: parents } = await sb.from('persons')
+          .select('id, full_name, generation').in('id', parentIds);
+        pc.forEach(p => {
+          const par = (parents || []).find(x => x.id === p.parent_id);
+          if (!par) return;
+          if (p.parent_role === 'Bố') fatherName = par.full_name + ' (Đời ' + par.generation + ')';
+          else if (p.parent_role === 'Mẹ') motherName = par.full_name + ' (Đời ' + par.generation + ')';
+        });
+      }
 
-  const title = document.getElementById('formTitle');
+      // Load children
+      const { data: myKids } = await sb.from('parent_child')
+        .select('*').eq('parent_id', personId);
+      let kidsList = [];
+      if (myKids && myKids.length) {
+        const kidIds = myKids.map(k => k.child_id);
+        const { data: kids } = await sb.from('persons')
+          .select('id, full_name, generation, gender').in('id', kidIds);
+        kidsList = kids || [];
+      }
 
-  if (personId) {
-    title.textContent = 'THÔNG TIN CÁ NHÂN';
-    currentViewMode = 'view';
-    showViewMode(personId);
-  } else {
-    title.textContent = 'THÊM CÁ NHÂN MỚI';
+      renderPersonView(person, spouseNames, fatherName, motherName, kidsList);
+    } catch (err) {
+      console.error(LOG, 'showViewMode error', err);
+      const viewBody = $('personViewBody');
+      if (viewBody) viewBody.innerHTML = '<p class="person-view__empty">Lỗi: ' + escHtml(err.message) + '</p>';
+    }
+  }
+
+  // ---------- RENDER PERSON VIEW ----------
+  function renderPersonView(person, spouseNames, fatherName, motherName, kidsList) {
+    const container = $('personViewBody');
+    if (!container) return;
+
+    const yearsParts = [];
+    if (person.birth_year) yearsParts.push(person.birth_year);
+    if (person.death_year) yearsParts.push(person.death_year);
+    const years = yearsParts.join(' – ');
+
+    const avatarHtml = person.avatar_url
+      ? `<img src="${escHtml(person.avatar_url)}" class="person-view__avatar" alt="avatar">`
+      : `<div class="person-view__avatar person-view__avatar--empty">${(person.full_name || '?').charAt(0)}</div>`;
+
+    container.innerHTML = `
+      <div class="person-view">
+        ${avatarHtml}
+        <h2 class="person-view__name">${escHtml(person.full_name || '')}</h2>
+        <p class="person-view__meta">
+          ${years ? '📅 ' + years + ' • ' : ''}
+          Đời ${person.generation || '?'} 
+          ${person.gender ? ' • ' + escHtml(person.gender) : ''}
+          ${person.branch ? ' • ' + escHtml(person.branch) : ''}
+        </p>
+        ${fatherName ? `<p class="person-view__row"><b>Bố:</b> ${escHtml(fatherName)}</p>` : ''}
+        ${motherName ? `<p class="person-view__row"><b>Mẹ:</b> ${escHtml(motherName)}</p>` : ''}
+        ${spouseNames.length ? `<p class="person-view__row"><b>Vợ/Chồng:</b> ${escHtml(spouseNames.join(', '))}</p>` : ''}
+        ${kidsList.length ? `<p class="person-view__row"><b>Con:</b> ${escHtml(kidsList.map(k => k.full_name).join(', '))}</p>` : ''}
+        ${person.hometown ? `<p class="person-view__row"><b>Quê:</b> ${escHtml(person.hometown)}</p>` : ''}
+        ${person.occupation ? `<p class="person-view__row"><b>Nghề:</b> ${escHtml(person.occupation)}</p>` : ''}
+        ${person.bio ? `<p class="person-view__row"><b>Tiểu sử:</b> ${escHtml(person.bio)}</p>` : ''}
+      </div>
+    `;
+  }
+
+  // ---------- SHOW EDIT MODE ----------
+  function showEditMode() {
+    const viewBody = $('personViewBody');
+    const editBody = $('personEditBody');
+    if (viewBody) viewBody.style.display = 'none';
+    if (editBody) editBody.style.display = 'block';
+    loadPersonEditFields();
+    initParentAutocomplete();
+  }
+
+  // ---------- LOAD PERSON EDIT FIELDS ----------
+  async function loadPersonEditFields() {
+    if (!currentEditingPersonId) return;
+    try {
+      sb = getSupabase();
+      const { data: person } = await sb.from('persons').select('*').eq('id', currentEditingPersonId).single();
+      if (!person) return;
+      tempOriginalPerson = person;
+      const set = (id, val) => { const el = $(id); if (el) el.value = val ?? ''; };
+      set('personName', person.full_name);
+      set('personGender', person.gender);
+      set('personGeneration', person.generation);
+      set('personBirthYear', person.birth_year);
+      set('personDeathYear', person.death_year);
+      set('personBranch', person.branch);
+      set('personHometown', person.hometown);
+      set('personOccupation', person.occupation);
+      set('personBio', person.bio);
+      renderAvatarPreview();
+
+      // Load parents → điền vào ô autocomplete
+      const { data: pc } = await sb.from('parent_child').select('*').eq('child_id', currentEditingPersonId);
+      if (pc && pc.length) {
+        const parentIds = pc.map(p => p.parent_id);
+        const { data: parents } = await sb.from('persons').select('id, full_name, generation').in('id', parentIds);
+        pc.forEach(p => {
+          const par = (parents || []).find(x => x.id === p.parent_id);
+          if (!par) return;
+          const inputId = p.parent_role === 'Bố' ? 'personFatherInput' : 'personMotherInput';
+          const hiddenId = p.parent_role === 'Bố' ? 'personFatherId' : 'personMotherId';
+          const input = $(inputId);
+          const hidden = $(hiddenId);
+          if (input) input.value = par.full_name + ' (Đời ' + par.generation + ')';
+          if (hidden) hidden.value = par.id;
+        });
+      }
+    } catch (e) { console.error(LOG, 'loadPersonEditFields', e); }
+  }
+
+  // ---------- SWITCH TO EDIT MODE ----------
+  window.switchToEditMode = function () {
+    if (!currentEditingPersonId) return;
     currentViewMode = 'edit';
-    resetForm();
-    showEditMode();
-    autoFillCreatedByName();
+    const viewBody = $('personViewBody');
+    const editBody = $('personEditBody');
+    if (viewBody) viewBody.style.display = 'none';
+    if (editBody) editBody.style.display = 'block';
+    const title = $('formTitle');
+    if (title) title.textContent = 'SỬA THÔNG TIN CÁ NHÂN';
+    loadPersonEditFields();
+    initParentAutocomplete();
+  };
+
+  // ---------- AVATAR ----------
+  function renderAvatarPreview() {
+    const preview = $('avatarPreview');
+    if (!preview) return;
+    if (tempAvatarData) {
+      preview.innerHTML = `<img src="${tempAvatarData}" alt="preview">`;
+    } else if (currentEditingAvatarPath) {
+      preview.innerHTML = `<img src="${currentEditingAvatarPath}" alt="avatar">`;
+    } else {
+      preview.innerHTML = `<div class="avatar-empty">Chưa có ảnh</div>`;
+    }
   }
 
-  populateRelationDropdowns();
-  renderSpouseRows();
-  renderTempChildren();
-  renderLinkedNotes();
+  window.handleAvatarChange = async function (input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { alert('Ảnh quá lớn, tối đa 5MB'); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+      tempAvatarData = e.target.result;
+      renderAvatarPreview();
+    };
+    reader.readAsDataURL(file);
+  };
 
-  showModal('personFormModal');
-  document.body.style.overflow = 'hidden';
-}
+  // ---------- SPOUSE ROWS ----------
+  window.addSpouseRow = function () {
+    const container = $('spouseRows');
+    if (!container) return;
+    const rowId = 'spouse-row-' + Date.now();
+    const spouseCounter = container.children.length + 1;
+    const row = document.createElement('div');
+    row.className = 'spouse-row';
+    row.id = rowId;
+    row.innerHTML = `
+      <span class="spouse-row__label">Vợ/Chồng ${spouseCounter}:</span>
+      <select class="spouse-select"><option value="">-- Chọn vợ/chồng --</option></select>
+      <button type="button" class="spouse-row__remove" onclick="removeSpouseRow('${rowId}')">×</button>
+    `;
+    container.appendChild(row);
+    populateSpouseSelect(row.querySelector('.spouse-select'));
+  };
 
-function closePersonForm() {
-  const msg = currentViewMode === 'edit'
-    ? 'Bạn có chắc muốn hủy? Mọi thay đổi chưa lưu sẽ mất.'
-    : 'Đóng hồ sơ này?';
-  if (!confirm(msg)) return;
+  window.removeSpouseRow = function (rowId) {
+    const row = $(rowId);
+    if (row) row.remove();
+    const container = $('spouseRows');
+    if (!container) return;
+    Array.from(container.querySelectorAll('.spouse-row')).forEach((r, idx) => {
+      const lbl = r.querySelector('.spouse-row__label');
+      if (lbl) lbl.textContent = 'Vợ/Chồng ' + (idx + 1) + ':';
+    });
+  };
 
-  hideModal('personFormModal');
-  document.body.style.overflow = '';
-  currentEditingPersonId = null;
-  tempChildrenList = [];
-  tempAvatarData = null;
-  currentEditingAvatarPath = null;
-  tempLinkedNoteIds = [];
-  tempOriginalPerson = null;
-  currentViewMode = 'view';
-}
-
-/* ============================================
-   2. TẦNG 1: XEM THÔNG TIN
-   ============================================ */
-async function showViewMode(personId) {
-  currentViewMode = 'view';
-
-  document.getElementById('personViewBody').style.display = 'block';
-  document.getElementById('personEditBody').style.display = 'none';
-  document.getElementById('formTitle').textContent = 'THÔNG TIN CÁ NHÂN';
-
-  renderViewFooter();
-
-  if (!window.sbClient) {
-    document.getElementById('personViewContent').innerHTML =
-      '<p class="person-view__empty">Chưa kết nối được database.</p>';
-    return;
+  async function populateSpouseSelect(select) {
+    if (!select) return;
+    try {
+      sb = getSupabase();
+      const { data } = await sb.from('persons').select('id, full_name, generation').eq('is_deleted', false);
+      select.innerHTML = '<option value="">-- Chọn vợ/chồng --</option>';
+      (data || []).forEach(p => {
+        const o = document.createElement('option');
+        o.value = p.id;
+        o.textContent = p.full_name + ' (Đời ' + p.generation + ')';
+        select.appendChild(o);
+      });
+    } catch (e) { console.error(LOG, 'populateSpouseSelect', e); }
   }
 
-  try {
-    const { data: person, error } = await window.sbClient
-      .from('persons').select('*').eq('id', personId).maybeSingle();
+  // ============================================================
+  // AUTOCOMPLETE BỐ / MẸ
+  // ============================================================
+  function initParentAutocomplete() {
+    // Load cache toàn bộ persons
+    loadAllPersonsCache().then(() => {
+      setupAutocomplete('personFatherInput', 'personFatherId', 'fatherDropdown', 'Bố');
+      setupAutocomplete('personMotherInput', 'personMotherId', 'motherDropdown', 'Mẹ');
+    });
+  }
 
-    if (error) throw error;
-    if (!person) {
-      // v3.4.3 — Người này không còn tồn tại (đã bị xoá)
-      document.getElementById('personViewContent').innerHTML =
-        '<p class="person-view__empty">⚠️ Người này không còn tồn tại.<br>Có thể đã bị xoá. Danh sách sẽ được làm mới.</p>';
-      // Đóng form sau 1.5s + refresh list
-      setTimeout(async () => {
-        hideModal('personFormModal');
-        document.body.style.overflow = '';
-        currentEditingPersonId = null;
-        currentViewMode = 'view';
-        await refreshPersonList();
-      }, 1500);
+  async function loadAllPersonsCache() {
+    try {
+      sb = getSupabase();
+      const { data } = await sb.from('persons')
+        .select('id, full_name, generation, gender, is_deleted')
+        .eq('is_deleted', false);
+      allPersonsCache = data || [];
+      console.log(LOG, 'Cache loaded:', allPersonsCache.length, 'persons');
+    } catch (e) { console.error(LOG, 'loadAllPersonsCache', e); }
+  }
+
+  function setupAutocomplete(inputId, hiddenId, dropdownId, role) {
+    const input = $(inputId);
+    const hidden = $(hiddenId);
+    const dropdown = $(dropdownId);
+    if (!input || !hidden || !dropdown) {
+      console.warn(LOG, 'Thiếu element autocomplete:', inputId, hiddenId, dropdownId);
       return;
     }
 
-    tempOriginalPerson = person;
-
-    const { data: marriages } = await window.sbClient
-      .from('marriages').select('*')
-      .or('husband_id.eq.' + personId + ',wife_id.eq.' + personId);
-
-    const spouseNames = [];
-    if (marriages && marriages.length > 0) {
-      for (const m of marriages) {
-        const sId = m.husband_id === personId ? m.wife_id : m.husband_id;
-        const { data: spouse } = await window.sbClient
-          .from('persons').select('full_name, generation').eq('id', sId).maybeSingle();
-        if (spouse) spouseNames.push(spouse.full_name + ' (Đời ' + spouse.generation + ')');
-      }
-    }
-
-    const { data: parents } = await window.sbClient
-      .from('parent_child').select('parent_id, parent_role').eq('child_id', personId);
-
-    let fatherName = '', motherName = '';
-    if (parents && parents.length > 0) {
-      for (const p of parents) {
-        const { data: par } = await window.sbClient
-          .from('persons').select('full_name, generation').eq('id', p.parent_id).maybeSingle();
-        if (par) {
-          if (p.parent_role === 'Bố') fatherName = par.full_name + ' (Đời ' + par.generation + ')';
-          else if (p.parent_role === 'Mẹ') motherName = par.full_name + ' (Đời ' + par.generation + ')';
-        }
-      }
-    }
-
-    renderPersonView(person, spouseNames, fatherName, motherName);
-
-  } catch (err) {
-    console.error('Lỗi load view:', err);
-    document.getElementById('personViewContent').innerHTML =
-      '<p class="person-view__empty">❌ Không tải được thông tin: ' + err.message + '</p>';
-  }
-}
-
-function renderPersonView(person, spouseNames, fatherName, motherName) {
-  const container = document.getElementById('personViewContent');
-
-  const yearsParts = [];
-  if (person.birth_year) yearsParts.push(person.birth_year);
-  if (person.death_year) yearsParts.push(person.death_year);
-  const yearsStr = yearsParts.length === 2
-    ? yearsParts[0] + ' - ' + yearsParts[1]
-    : (yearsParts[0] ? yearsParts[0] : '');
-
-  let avatarHtml;
-  if (person.avatar_url) {
-    avatarHtml = '<img src="' + person.avatar_url + '" alt="Avatar">';
-  } else {
-    avatarHtml = '<span class="person-view__avatar-placeholder">📷</span>';
-  }
-
-  const hasFullDates = person.birth_year && person.death_year;
-  const nameClass = hasFullDates
-    ? 'person-view__name person-view__name--full-dates'
-    : 'person-view__name';
-
-  function field(label, value) {
-    const val = value ? String(value) : '';
-    const isEmpty = !val || val === 'null' || val === 'undefined';
-    return '<div class="person-view__field">' +
-      '<div class="person-view__field-label">' + label + '</div>' +
-      '<div class="person-view__field-value' + (isEmpty ? ' person-view__field-value--empty' : '') + '">' +
-        (isEmpty ? '(chưa có thông tin)' : val) +
-      '</div>' +
-    '</div>';
-  }
-
-  const html =
-    '<div class="person-view__avatar">' + avatarHtml + '</div>' +
-    '<div class="' + nameClass + '">' + (person.full_name || '(chưa có tên)') + '</div>' +
-    (yearsStr ? '<div class="person-view__years">' + yearsStr + '</div>' : '') +
-
-    '<div class="person-view__section">' +
-      '<div class="person-view__section-title">THÔNG TIN CƠ BẢN</div>' +
-      field('Vai trò', person.role_type || person.role) +
-      field('Giới tính', person.gender) +
-      field('Đời thứ', person.generation ? 'Đời ' + person.generation : '') +
-      field('Chi nhánh', person.branch) +
-      field('Thứ tự sinh', person.sibling_order) +
-      field('Nơi sinh', person.birth_place) +
-      field('Hoàn cảnh đặc biệt', person.special_status && person.special_status !== 'Bình thường' ? person.special_status : '') +
-    '</div>' +
-
-    '<div class="person-view__section">' +
-      '<div class="person-view__section-title">QUAN HỆ GIA ĐÌNH</div>' +
-      field('Bố', fatherName) +
-      field('Mẹ', motherName) +
-      field('Vợ/Chồng', spouseNames.length > 0 ? spouseNames.join(', ') : '') +
-    '</div>' +
-
-    '<div class="person-view__section">' +
-      '<div class="person-view__section-title">CON CÁI</div>' +
-      '<div class="person-view__children-note">' +
-        'danh sách tên con cái tự động cập khi có khai báo nhận cha mẹ ở đời sau' +
-      '</div>' +
-    '</div>' +
-
-    (person.occupation ?
-      '<div class="person-view__section">' +
-        '<div class="person-view__section-title">THÔNG TIN CÁ NHÂN</div>' +
-        field('Nghề nghiệp / Chuyên môn', person.occupation) +
-      '</div>' : '') +
-
-    (person.bio ?
-      '<div class="person-view__section">' +
-        '<div class="person-view__section-title">TIỂU SỬ</div>' +
-        '<div class="person-view__field">' +
-          '<div class="person-view__field-value" style="font-style: italic;">' + person.bio + '</div>' +
-        '</div>' +
-      '</div>' : '') +
-
-    '<div class="person-view__section">' +
-      '<div class="person-view__section-title">BÀI VIẾT LIÊN QUAN Ở NGOẠI PHẢ</div>' +
-      '<div class="person-view__children-note">Bấm nút "Sửa" để thêm liên kết bài viết.</div>' +
-    '</div>' +
-
-    (person.created_by_name ?
-      '<div class="person-view__section">' +
-        '<div class="person-view__section-title">NGƯỜI ĐĂNG THÔNG TIN</div>' +
-        field('Tên người đăng', person.created_by_name) +
-      '</div>' : '');
-
-  container.innerHTML = html;
-}
-
-function renderViewFooter() {
-  const footer = document.getElementById('personFormFooter');
-  const deleteBtn = currentEditingPersonId
-    ? '<button type="button" class="btn btn--danger" onclick="deletePerson()">🗑️ XOÁ</button>'
-    : '';
-
-  footer.innerHTML =
-    '<div class="form-modal__footer-left">' +
-      '<button type="button" class="btn btn--ghost" onclick="closePersonForm()">TRỞ VỀ</button>' +
-      deleteBtn +
-    '</div>' +
-    '<div class="form-modal__footer-right">' +
-      '<button type="button" class="btn btn--ghost" onclick="goToPhaDo()">ĐẾN PHẢ ĐỒ</button>' +
-      '<button type="button" class="btn btn--primary" onclick="switchToEditMode()">✏️ SỬA</button>' +
-    '</div>';
-}
-
-function switchToEditMode() {
-  if (!currentEditingPersonId) return;
-  currentViewMode = 'edit';
-
-  document.getElementById('personViewBody').style.display = 'none';
-  document.getElementById('personEditBody').style.display = 'block';
-  document.getElementById('formTitle').textContent = 'SỬA THÔNG TIN CÁ NHÂN';
-
-  renderEditFooter();
-  loadPersonForEdit(currentEditingPersonId);
-}
-
-/* ============================================
-   3. TẦNG 2: SỬA THÔNG TIN
-   ============================================ */
-function showEditMode() {
-  document.getElementById('personViewBody').style.display = 'none';
-  document.getElementById('personEditBody').style.display = 'block';
-  renderEditFooter();
-}
-
-function renderEditFooter() {
-  const footer = document.getElementById('personFormFooter');
-
-  footer.innerHTML =
-    '<div class="form-modal__footer-left">' +
-      '<button type="button" class="btn btn--ghost" onclick="cancelEdit()">❌ HỦY</button>' +
-    '</div>' +
-    '<div class="form-modal__footer-right">' +
-      '<button type="button" class="btn btn--primary" onclick="savePerson()">💾 LƯU</button>' +
-    '</div>';
-}
-
-/* ============================================
-   4. NÚT "ĐẾN PHẢ ĐỒ"
-   ============================================ */
-function goToPhaDo() {
-  const tab = document.querySelector('.tab[data-tab="pha-do"]');
-  if (tab) tab.click();
-
-  hideModal('personFormModal');
-  document.body.style.overflow = '';
-  currentEditingPersonId = null;
-  currentViewMode = 'view';
-
-  setTimeout(() => {
-    alert('📊 PHẢ ĐỒ ĐANG ĐƯỢC XÂY DỰNG\n\nSẽ hiển thị cây gia phả dạng đồ thị với các đường nối cha-con.\n\nVui lòng quay lại sau!');
-  }, 300);
-}
-
-/* ============================================
-   5. RESET FORM
-   ============================================ */
-function resetForm() {
-  const ids = ['fullName', 'gender', 'branch', 'siblingOrder', 'birthYear',
-               'deathYear', 'birthPlace', 'specialStatus', 'occupation',
-               'conflictNote', 'bio', 'fatherId', 'motherId',
-               'roleType', 'generation', 'createdByName'];
-
-  ids.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) {
-      if (el.tagName === 'SELECT') el.selectedIndex = 0;
-      else el.value = '';
-    }
-  });
-
-  const av = document.getElementById('avatarPreview');
-  if (av) av.innerHTML = '<span class="avatar-preview__placeholder">📷</span>';
-
-  const cl = document.getElementById('contactList');
-  if (cl) cl.innerHTML = '';
-
-  const sr = document.getElementById('spouseRows');
-  if (sr) sr.innerHTML = '';
-
-  renderTempChildren();
-  renderLinkedNotes();
-}
-
-async function autoFillCreatedByName() {
-  if (!window.currentUser || !window.sbClient) return;
-  try {
-    const { data: profile } = await window.sbClient
-      .from('profiles').select('display_name')
-      .eq('id', window.currentUser.id).maybeSingle();
-
-    const nameInput = document.getElementById('createdByName');
-    if (nameInput && profile && profile.display_name) {
-      nameInput.value = profile.display_name;
-    } else if (nameInput && window.currentUser.email) {
-      nameInput.value = window.currentUser.email;
-    }
-  } catch (err) { console.error(err); }
-}
-
-/* ============================================
-   6. CROP ẢNH + B3 UPLOAD LÊN STORAGE
-   ============================================ */
-function openCropModal(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  if (!file.type.startsWith('image/')) {
-    alert('⚠️ Vui lòng chọn file ảnh');
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const img = document.getElementById('cropImage');
-    if (!img) return;
-    img.src = e.target.result;
-    showModal('cropModal');
-
-    img.onload = () => {
-      if (cropper) cropper.destroy();
-      if (typeof Cropper !== 'undefined') {
-        cropper = new Cropper(img, {
-          aspectRatio: 3/4, viewMode: 1, autoCropArea: 0.85,
-          responsive: true, background: false, dragMode: 'move'
-        });
-      }
-    };
-  };
-  reader.readAsDataURL(file);
-}
-
-function closeCropModal() { hideModal('cropModal'); }
-function rotateCropImage(d) { if (cropper) cropper.rotate(d); }
-function flipCropImage(dir) { if (cropper) dir === 'h' ? cropper.scaleX(-1) : cropper.scaleY(-1); }
-function resetCropImage() { if (cropper) cropper.reset(); }
-
-async function confirmCrop() {
-  if (!cropper) return;
-
-  const btn = document.querySelector('#cropModal .btn--primary');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang tải lên...'; }
-
-  try {
-    const canvas = cropper.getCroppedCanvas({
-      width: 600,
-      height: 800,
-      imageSmoothingQuality: 'high'
+    // Xoá input cũ → xoá hidden
+    input.addEventListener('input', function () {
+      hidden.value = '';
+      const q = normalize(input.value.trim());
+      if (q.length < 1) { dropdown.style.display = 'none'; return; }
+      const matches = allPersonsCache
+        .filter(p => normalize(p.full_name).includes(q))
+        .slice(0, 8);
+      renderDropdown(dropdown, matches, input, hidden, role);
     });
 
-    const blob = await new Promise((resolve) =>
-      canvas.toBlob(resolve, 'image/webp', 0.85)
-    );
-    if (!blob) throw new Error('Không tạo được file ảnh');
-
-    let userId = window.currentUser ? window.currentUser.id : null;
-    if (!userId) {
-      const { data: { user } } = await window.sbClient.auth.getUser();
-      userId = user ? user.id : null;
-    }
-    if (!userId) throw new Error('Bạn cần đăng nhập để upload ảnh');
-
-    const timestamp = Date.now();
-    const filePath = userId + '/' + timestamp + '.webp';
-
-    const { error: upErr } = await window.sbClient
-      .storage
-      .from('avatars')
-      .upload(filePath, blob, {
-        contentType: 'image/webp',
-        cacheControl: '31536000',
-        upsert: false
-      });
-    if (upErr) throw upErr;
-
-    const { data: urlData } = window.sbClient
-      .storage
-      .from('avatars')
-      .getPublicUrl(filePath);
-    const publicUrl = urlData.publicUrl;
-
-    const oldPath = currentEditingAvatarPath;
-    if (oldPath && oldPath !== filePath) {
-      window.sbClient.storage.from('avatars').remove([oldPath])
-        .then(({ error }) => { if (error) console.warn('Không xoá được ảnh cũ:', error); })
-        .catch(err => console.warn('Xoá ảnh cũ lỗi:', err));
-    }
-
-    tempAvatarData = publicUrl;
-    currentEditingAvatarPath = filePath;
-
-    const av = document.getElementById('avatarPreview');
-    if (av) av.innerHTML = '<img src="' + publicUrl + '" alt="Avatar">';
-
-    console.log('✅ Avatar uploaded:', publicUrl);
-    closeCropModal();
-
-  } catch (err) {
-    console.error('confirmCrop error:', err);
-    alert('❌ Upload ảnh thất bại:\n\n' + err.message +
-          '\n\nKiểm tra:\n- Đã đăng nhập chưa?\n- Bucket `avatars` đã public & có policy INSERT cho authenticated chưa?');
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'CẮT ẢNH'; }
-  }
-}
-
-/* ============================================
-   7. POPULATE DROPDOWNS
-   ============================================ */
-function populateRelationDropdowns() {
-  const persons = window.allPersons || [];
-  const f = document.getElementById('fatherId');
-  const m = document.getElementById('motherId');
-  if (!f || !m) return;
-
-  f.innerHTML = '<option value="">-- Chọn bố --</option>' +
-    persons.filter(p => p.gender === 'Nam' && p.id !== currentEditingPersonId && !p.is_deleted)
-      .map(p => '<option value="' + p.id + '">' + p.full_name + ' (Đời ' + p.generation + ')</option>').join('');
-
-  m.innerHTML = '<option value="">-- Chọn mẹ --</option>' +
-    persons.filter(p => p.gender === 'Nữ' && p.id !== currentEditingPersonId && !p.is_deleted)
-      .map(p => '<option value="' + p.id + '">' + p.full_name + ' (Đời ' + p.generation + ')</option>').join('');
-}
-
-/* ============================================
-   8. VỢ/CHỒNG
-   ============================================ */
-let spouseRowCounter = 0;
-
-function addSpouseRow() {
-  spouseRowCounter++;
-  const container = document.getElementById('spouseRows');
-  if (!container) return;
-  const rowId = 'spouse_row_' + spouseRowCounter;
-
-  const row = document.createElement('div');
-  row.className = 'spouse-row';
-  row.id = rowId;
-  row.innerHTML =
-    '<span class="spouse-row__label">Vợ/Chồng ' + spouseRowCounter + ':</span>' +
-    '<select class="spouse-select"><option value="">-- Chọn vợ/chồng --</option></select>' +
-    '<button type="button" class="spouse-row__remove" onclick="removeSpouseRow(\'' + rowId + '\')">×</button>';
-
-  container.appendChild(row);
-  populateSpouseSelect(row.querySelector('.spouse-select'));
-}
-
-function removeSpouseRow(rowId) {
-  const row = document.getElementById(rowId);
-  if (row) row.remove();
-  document.querySelectorAll('#spouseRows .spouse-row').forEach((r, idx) => {
-    r.querySelector('.spouse-row__label').textContent = 'Vợ/Chồng ' + (idx + 1) + ':';
-  });
-}
-
-function populateSpouseSelect(select) {
-  const persons = window.allPersons || [];
-  select.innerHTML = '<option value="">-- Chọn vợ/chồng --</option>' +
-    persons.filter(p => p.id !== currentEditingPersonId && !p.is_deleted)
-      .map(p => '<option value="' + p.id + '">' + p.full_name + ' (Đời ' + p.generation + ')</option>').join('');
-}
-
-function renderSpouseRows() {
-  const c = document.getElementById('spouseRows');
-  if (!c) return;
-  c.innerHTML = '';
-  spouseRowCounter = 0;
-  addSpouseRow();
-}
-
-function getSpouseRowsData() {
-  const rows = document.querySelectorAll('#spouseRows .spouse-row');
-  const result = [];
-  rows.forEach((row, idx) => {
-    const sel = row.querySelector('.spouse-select');
-    if (sel && sel.value) result.push({ personId: sel.value, order: idx + 1 });
-  });
-  return result;
-}
-
-/* ============================================
-   9. THÊM CON
-   ============================================ */
-function openAddChildModal() {
-  showModal('addChildModal');
-  ['childName', 'childBirthYear', 'childOrder'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-}
-
-function closeAddChildModal() { hideModal('addChildModal'); }
-
-function confirmAddChild() {
-  const nameRaw = document.getElementById('childName').value.trim();
-  if (!nameRaw) { alert('⚠️ Vui lòng nhập họ tên con'); return; }
-  const name = capitalizeVietnameseName(nameRaw);
-
-  tempChildrenList.push({
-    temp_id: 'temp_' + Date.now(),
-    full_name: name,
-    gender: document.getElementById('childGender').value,
-    birth_year: parseInt(document.getElementById('childBirthYear').value) || null,
-    sibling_order: parseInt(document.getElementById('childOrder').value) || null,
-    child_type: document.getElementById('childType').value
-  });
-
-  renderTempChildren();
-  closeAddChildModal();
-}
-
-function renderTempChildren() {
-  const list = document.getElementById('childrenList');
-  if (!list) return;
-
-  if (tempChildrenList.length === 0) {
-    list.innerHTML = '<p class="empty-hint">Chưa có con nào. Bấm "+ Thêm con" để thêm.</p>';
-    return;
-  }
-
-  list.innerHTML = tempChildrenList.map((child, idx) =>
-    '<div class="child-item">' +
-      '<div class="child-item__info">' +
-        '<div class="child-item__name">' + (idx + 1) + '. ' + child.full_name + '</div>' +
-        '<div class="child-item__meta">' + child.gender + (child.birth_year ? ' • ' + child.birth_year : '') + '</div>' +
-      '</div>' +
-      '<div class="child-item__type">' + child.child_type + '</div>' +
-      '<div class="child-item__actions">' +
-        '<button type="button" class="child-item__btn" onclick="removeTempChild(\'' + child.temp_id + '\')">🗑️</button>' +
-      '</div>' +
-    '</div>'
-  ).join('');
-}
-
-function removeTempChild(tempId) {
-  if (!confirm('Xóa con này?')) return;
-  tempChildrenList = tempChildrenList.filter(c => c.temp_id !== tempId);
-  renderTempChildren();
-}
-
-/* ============================================
-   10. GÁN NHANH
-   ============================================ */
-function openQuickAddModal() {
-  showModal('quickAddModal');
-  const t = document.getElementById('quickAddText');
-  if (t) t.value = '';
-}
-
-function closeQuickAddModal() { hideModal('quickAddModal'); }
-
-function confirmQuickAdd() {
-  const text = document.getElementById('quickAddText').value.trim();
-  if (!text) { alert('⚠️ Vui lòng paste danh sách tên'); return; }
-
-  const lines = text.split('\n').filter(l => l.trim());
-  let ok = 0, skip = 0;
-
-  lines.forEach(line => {
-    let name = line.trim();
-    if (name.includes('|')) name = name.split('|')[0].trim();
-    if (!name) { skip++; return; }
-    name = capitalizeVietnameseName(name);
-
-    if (tempChildrenList.some(c => c.full_name.toLowerCase() === name.toLowerCase())) {
-      skip++; return;
-    }
-
-    const gender = (name.includes('Thị') || name.includes('thị')) ? 'Nữ' : 'Nam';
-    tempChildrenList.push({
-      temp_id: 'temp_' + Date.now() + '_' + Math.random(),
-      full_name: name, gender: gender, birth_year: null,
-      sibling_order: tempChildrenList.length + 1,
-      child_type: 'Con chung'
+    input.addEventListener('focus', function () {
+      const q = normalize(input.value.trim());
+      if (q.length >= 1) {
+        const matches = allPersonsCache
+          .filter(p => normalize(p.full_name).includes(q))
+          .slice(0, 8);
+        renderDropdown(dropdown, matches, input, hidden, role);
+      }
     });
-    ok++;
-  });
 
-  renderTempChildren();
-  closeQuickAddModal();
-
-  let msg = '✅ Đã thêm ' + ok + ' con';
-  if (skip > 0) msg += '\n⚠️ Bỏ qua ' + skip + ' dòng';
-  alert(msg);
-}
-
-/* ============================================
-   11. LIÊN KẾT BÀI VIẾT
-   ============================================ */
-async function loadNotesCache() {
-  if (!window.sbClient) return;
-  try {
-    const { data, error } = await window.sbClient.from('notes').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    allNotesCache = data || [];
-  } catch (err) { allNotesCache = []; }
-}
-
-function renderLinkedNotes() {
-  const list = document.getElementById('linkedNotesList');
-  if (!list) return;
-
-  if (tempLinkedNoteIds.length === 0) {
-    list.innerHTML = '<p class="empty-hint">Chưa có bài viết liên kết.</p>';
-    return;
-  }
-
-  const linked = allNotesCache.filter(n => tempLinkedNoteIds.includes(n.id));
-  if (linked.length === 0) {
-    list.innerHTML = '<p class="empty-hint">Đang tải...</p>';
-    return;
-  }
-
-  list.innerHTML = linked.map(n =>
-    '<div class="linked-note-item" ondblclick="goToNote(\'' + n.id + '\')">' +
-      '<span>📄</span>' +
-      '<span style="flex:1;">' + (n.title || n.content.substring(0, 50)) + '</span>' +
-      '<button type="button" onclick="event.stopPropagation(); removeLinkedNote(\'' + n.id + '\')">×</button>' +
-    '</div>'
-  ).join('');
-}
-
-function removeLinkedNote(id) {
-  tempLinkedNoteIds = tempLinkedNoteIds.filter(x => x !== id);
-  renderLinkedNotes();
-}
-
-function goToNote(noteId) {
-  const tab = document.querySelector('.tab[data-tab="ngoai-pha"]');
-  if (tab) tab.click();
-  hideModal('personFormModal');
-  document.body.style.overflow = '';
-}
-
-async function openLinkNoteModal() {
-  await loadNotesCache();
-  const list = document.getElementById('availableNotesList');
-  if (!list) return;
-
-  if (allNotesCache.length === 0) {
-    list.innerHTML = '<p class="empty-hint">Chưa có bài viết nào.</p>';
-    showModal('linkNoteModal');
-    return;
-  }
-
-  list.innerHTML = allNotesCache.map(n => {
-    const checked = tempLinkedNoteIds.includes(n.id) ? 'checked' : '';
-    return '<label class="note-picker-item">' +
-      '<input type="checkbox" value="' + n.id + '" ' + checked + '>' +
-      '<span>' + (n.title || n.content.substring(0, 50)) + '</span>' +
-    '</label>';
-  }).join('');
-
-  showModal('linkNoteModal');
-}
-
-function closeLinkNoteModal() { hideModal('linkNoteModal'); }
-
-function confirmLinkNote() {
-  const cbs = document.querySelectorAll('#availableNotesList input[type="checkbox"]:checked');
-  tempLinkedNoteIds = Array.from(cbs).map(c => c.value);
-  renderLinkedNotes();
-  closeLinkNoteModal();
-}
-
-/* ============================================
-   12. LIÊN HỆ
-   ============================================ */
-function addContactRow() {
-  const list = document.getElementById('contactList');
-  if (!list) return;
-  const row = document.createElement('div');
-  row.className = 'contact-row';
-  row.innerHTML =
-    '<input type="text" placeholder="Tên mục" class="contact-name">' +
-    '<input type="text" placeholder="Nội dung" class="contact-value">' +
-    '<button type="button" class="contact-row__remove" onclick="this.parentElement.remove()">×</button>';
-  list.appendChild(row);
-}
-
-function getContactInfo() {
-  const rows = document.querySelectorAll('#contactList .contact-row');
-  const result = [];
-  rows.forEach(r => {
-    const n = r.querySelector('.contact-name').value.trim();
-    const v = r.querySelector('.contact-value').value.trim();
-    if (n && v) result.push({ name: n, value: v });
-  });
-  return result.length > 0 ? result : null;
-}
-
-/* ============================================
-   13. LOAD PERSON VÀO FORM SỬA (TẦNG 2)
-   ============================================ */
-async function loadPersonForEdit(personId) {
-  if (!window.sbClient) {
-    alert('⚠️ Chưa kết nối được database');
-    return;
-  }
-
-  try {
-    const { data: person, error } = await window.sbClient
-      .from('persons').select('*').eq('id', personId).maybeSingle();
-    if (error) throw error;
-    if (!person) throw new Error('Người này không còn tồn tại');
-
-    tempOriginalPerson = person;
-
-    const setVal = (id, val) => {
-      const el = document.getElementById(id);
-      if (el) el.value = val || '';
-    };
-
-    setVal('fullName', person.full_name);
-    setVal('gender', person.gender);
-    setVal('branch', person.branch);
-    setVal('siblingOrder', person.sibling_order);
-    setVal('birthYear', person.birth_year);
-    setVal('deathYear', person.death_year);
-    setVal('birthPlace', person.birth_place);
-    setVal('specialStatus', person.special_status);
-    setVal('occupation', person.occupation);
-    setVal('conflictNote', person.conflict_note);
-    setVal('bio', person.bio);
-    setVal('roleType', person.role_type || person.role);
-    setVal('generation', person.generation);
-    setVal('createdByName', person.created_by_name);
-
-    tempAvatarData = person.avatar_url || null;
-    currentEditingAvatarPath = urlToStoragePath(person.avatar_url);
-    const av = document.getElementById('avatarPreview');
-    if (av) {
-      if (person.avatar_url) {
-        av.innerHTML = '<img src="' + person.avatar_url + '" alt="Avatar">';
-      } else {
-        av.innerHTML = '<span class="avatar-preview__placeholder">📷</span>';
-      }
-    }
-
-    const { data: parents } = await window.sbClient
-      .from('parent_child').select('parent_id, parent_role')
-      .eq('child_id', personId);
-
-    const fatherSel = document.getElementById('fatherId');
-    const motherSel = document.getElementById('motherId');
-    if (fatherSel) fatherSel.value = '';
-    if (motherSel) motherSel.value = '';
-
-    if (parents && parents.length > 0) {
-      parents.forEach(p => {
-        if (p.parent_role === 'Bố' && fatherSel) fatherSel.value = p.parent_id;
-        else if (p.parent_role === 'Mẹ' && motherSel) motherSel.value = p.parent_id;
-      });
-    }
-
-    const { data: marriages } = await window.sbClient
-      .from('marriages').select('*')
-      .or('husband_id.eq.' + personId + ',wife_id.eq.' + personId);
-
-    const spouseContainer = document.getElementById('spouseRows');
-    if (spouseContainer) {
-      spouseContainer.innerHTML = '';
-      spouseRowCounter = 0;
-    }
-
-    if (marriages && marriages.length > 0) {
-      for (const m of marriages) {
-        const sId = m.husband_id === personId ? m.wife_id : m.husband_id;
-        addSpouseRow();
-        const rows = document.querySelectorAll('#spouseRows .spouse-row');
-        const lastRow = rows[rows.length - 1];
-        if (lastRow) {
-          const sel = lastRow.querySelector('.spouse-select');
-          if (sel) sel.value = sId;
-        }
-      }
-    } else {
-      addSpouseRow();
-    }
-
-    const { data: links } = await window.sbClient
-      .from('person_notes').select('note_id').eq('person_id', personId);
-
-    tempLinkedNoteIds = links ? links.map(l => l.note_id) : [];
-    await loadNotesCache();
-    renderLinkedNotes();
-
-    const contactList = document.getElementById('contactList');
-    if (contactList) contactList.innerHTML = '';
-
-    if (person.contact_info) {
-      let contacts = person.contact_info;
-      if (typeof contacts === 'string') {
-        try { contacts = JSON.parse(contacts); } catch (e) { contacts = null; }
-      }
-      if (Array.isArray(contacts)) {
-        contacts.forEach(c => {
-          addContactRow();
-          const rows = document.querySelectorAll('#contactList .contact-row');
-          const lastRow = rows[rows.length - 1];
-          if (lastRow) {
-            lastRow.querySelector('.contact-name').value = c.name || '';
-            lastRow.querySelector('.contact-value').value = c.value || '';
-          }
-        });
-      }
-    }
-
-    tempChildrenList = [];
-    renderTempChildren();
-
-    if (typeof refreshCharCounters === 'function') {
-      refreshCharCounters();
-    }
-
-  } catch (err) {
-    console.error('Lỗi load person for edit:', err);
-    alert('❌ Không tải được thông tin: ' + err.message);
-  }
-}
-
-/* ============================================
-   14. LƯU THÔNG TIN (SAVE PERSON) — v3.4.3
-   ============================================ */
-async function savePerson() {
-  if (!window.sbClient) {
-    alert('⚠️ Chưa kết nối được database');
-    return;
-  }
-
-  const fullNameRaw = document.getElementById('fullName').value.trim();
-  if (!fullNameRaw) {
-    alert('⚠️ Vui lòng nhập họ tên');
-    return;
-  }
-  const fullName = capitalizeVietnameseName(fullNameRaw);
-
-  const confirmMsg = currentEditingPersonId
-    ? '💾 Lưu thay đổi cho "' + fullName + '"?'
-    : '➕ Thêm cá nhân mới "' + fullName + '"?';
-  if (!confirm(confirmMsg)) return;
-
-  const saveBtns = document.querySelectorAll('.btn--primary');
-  saveBtns.forEach(b => { b.disabled = true; b.textContent = '⏳ Đang lưu...'; });
-
-  try {
-    const personData = {
-      full_name: fullName,
-      gender: document.getElementById('gender').value || null,
-      branch: document.getElementById('branch').value || null,
-      sibling_order: parseInt(document.getElementById('siblingOrder').value) || null,
-      birth_year: parseInt(document.getElementById('birthYear').value) || null,
-      death_year: parseInt(document.getElementById('deathYear').value) || null,
-      birth_place: document.getElementById('birthPlace').value.trim() || null,
-      special_status: document.getElementById('specialStatus').value || 'Bình thường',
-      occupation: document.getElementById('occupation').value.trim() || null,
-      conflict_note: document.getElementById('conflictNote').value.trim() || null,
-      bio: document.getElementById('bio').value.trim() || null,
-      role_type: document.getElementById('roleType').value || null,
-      generation: parseInt(document.getElementById('generation').value) || null,
-      created_by_name: capitalizeVietnameseName(
-        document.getElementById('createdByName').value.trim()
-      ) || null,
-      contact_info: getContactInfo()
-    };
-
-    // Kiểm tra trùng khi thêm mới
-    if (!currentEditingPersonId) {
-      try {
-        let query = window.sbClient
-          .from('persons')
-          .select('id, full_name, birth_year, generation')
-          .eq('full_name', fullName);
-
-        if (personData.birth_year) {
-          query = query.eq('birth_year', personData.birth_year);
-        }
-
-        const { data: duplicates } = await query;
-
-        if (duplicates && duplicates.length > 0) {
-          const dup = duplicates[0];
-          const msg =
-            '⚠️ ĐÃ CÓ NGƯỜI TRÙNG:\n\n' +
-            '• Họ tên: ' + dup.full_name + '\n' +
-            '• Năm sinh: ' + (dup.birth_year || '(không rõ)') + '\n' +
-            '• Đời: ' + (dup.generation || '?') + '\n\n' +
-            'Vẫn muốn thêm "' + fullName + '" làm người MỚI không?';
-
-          if (!confirm(msg)) {
-            saveBtns.forEach(b => { b.disabled = false; b.textContent = '💾 LƯU'; });
-            return;
-          }
-        }
-      } catch (checkErr) {
-        console.warn('Check trùng lỗi (bỏ qua):', checkErr);
-      }
-    }
-
-    if (tempAvatarData) personData.avatar_url = tempAvatarData;
-
-    let personId = currentEditingPersonId;
-
-    if (currentEditingPersonId) {
-      const { error } = await window.sbClient
-        .from('persons').update(personData).eq('id', currentEditingPersonId);
-      if (error) throw error;
-    } else {
-      personData.created_by = window.currentUser ? window.currentUser.id : null;
-      const { data: inserted, error } = await window.sbClient
-        .from('persons').insert(personData).select('id').single();
-      if (error) throw error;
-      personId = inserted.id;
-      currentEditingPersonId = personId;
-    }
-
-    const fatherId = document.getElementById('fatherId').value;
-    const motherId = document.getElementById('motherId').value;
-
-    await window.sbClient.from('parent_child').delete().eq('child_id', personId);
-
-    if (fatherId) await createParentChildLink(fatherId, personId, 'Bố');
-    if (motherId) await createParentChildLink(motherId, personId, 'Mẹ');
-
-    const spouses = getSpouseRowsData();
-
-    await window.sbClient.from('marriages').delete()
-      .or('husband_id.eq.' + personId + ',wife_id.eq.' + personId);
-
-    const personGender = document.getElementById('gender').value;
-    for (const sp of spouses) {
-      await createMarriageLink(personId, sp.personId, personGender, sp.order);
-    }
-
-    await window.sbClient.from('person_notes').delete().eq('person_id', personId);
-    if (tempLinkedNoteIds.length > 0) {
-      const noteLinks = tempLinkedNoteIds.map(nid => ({
-        person_id: personId, note_id: nid
-      }));
-      await window.sbClient.from('person_notes').insert(noteLinks);
-    }
-
-    for (const child of tempChildrenList) {
-      await createChildWithAutoCreate(child, personId, personGender);
-    }
-
-    // v3.4.3 — Refresh danh sách bằng loadAllData()
-    await refreshPersonList();
-
-    alert('✅ Đã lưu thành công!\n\n' + fullName);
-
-    if (currentViewMode === 'edit' && currentEditingPersonId) {
-      await showViewMode(currentEditingPersonId);
-    } else {
-      hideModal('personFormModal');
-      document.body.style.overflow = '';
-      currentEditingPersonId = null;
-      currentViewMode = 'view';
-    }
-
-  } catch (err) {
-    console.error('Lỗi save:', err);
-    alert('❌ Lỗi khi lưu:\n\n' + err.message);
-  } finally {
-    document.querySelectorAll('.btn--primary').forEach(b => {
-      b.disabled = false;
+    // Blur → ẩn sau 200ms (để click kịp)
+    input.addEventListener('blur', function () {
+      setTimeout(() => { dropdown.style.display = 'none'; }, 200);
     });
-    const footer = document.getElementById('personFormFooter');
-    if (footer) {
-      const saveBtn = footer.querySelector('.btn--primary');
-      if (saveBtn && saveBtn.textContent.includes('Đang lưu')) {
-        saveBtn.textContent = '💾 LƯU';
+  }
+
+  function renderDropdown(dropdown, matches, input, hidden, role) {
+    let html = '';
+    if (matches.length === 0) {
+      html = `<div class="ac-item ac-item--create" data-create="1">+ Tạo mới "${escHtml(input.value.trim())}"</div>`;
+    } else {
+      html = matches.map(p => `
+        <div class="ac-item" data-id="${escHtml(p.id)}" data-name="${escHtml(p.full_name)}" data-gen="${p.generation}">
+          <b>${escHtml(p.full_name)}</b>
+          <span class="ac-gen">Đời ${p.generation || '?'} • ${escHtml(p.gender || '')}</span>
+        </div>
+      `).join('');
+      const q = input.value.trim();
+      if (q) {
+        html += `<div class="ac-item ac-item--create" data-create="1">+ Tạo mới "${escHtml(q)}"</div>`;
       }
     }
+    dropdown.innerHTML = html;
+    dropdown.style.display = 'block';
+
+    // Bind click
+    dropdown.querySelectorAll('.ac-item').forEach(item => {
+      item.onmousedown = function (evt) {
+        evt.preventDefault();
+        if (item.dataset.create) {
+          // Tạo mới
+          const newName = input.value.trim();
+          if (!newName) return;
+          // Đời = đời hiện tại - 1
+          const gen = parseInt($('personGeneration')?.value || '0') - 1;
+          createPersonQuick(newName, role, gen).then(newId => {
+            if (newId) {
+              input.value = newName + ' (Đời ' + gen + ')';
+              hidden.value = newId;
+              // Cập nhật cache
+              allPersonsCache.push({ id: newId, full_name: newName, generation: gen, gender: role === 'Bố' ? 'Nam' : 'Nữ' });
+              dropdown.style.display = 'none';
+            }
+          });
+        } else {
+          // Chọn có sẵn
+          input.value = item.dataset.name + ' (Đời ' + item.dataset.gen + ')';
+          hidden.value = item.dataset.id;
+          dropdown.style.display = 'none';
+        }
+      };
+    });
   }
-}
 
-/* ============================================
-   15. XÓA NGƯỜI — v3.4.3
-   - Lấy tên thật từ DB nếu cache null
-   - Xoá liên kết + person
-   - Refresh danh sách bằng loadAllData()
-   ============================================ */
-async function deletePerson() {
-  if (!currentEditingPersonId) {
-    alert('⚠️ Chưa chọn người để xóa');
-    return;
-  }
-  if (!window.sbClient) {
-    alert('⚠️ Chưa kết nối được database');
-    return;
-  }
-
-  const personId = currentEditingPersonId;
-
-  // v3.4.3 — Lấy tên thật từ DB nếu tempOriginalPerson null
-  let name = tempOriginalPerson ? tempOriginalPerson.full_name : null;
-  let avatarUrl = tempOriginalPerson ? tempOriginalPerson.avatar_url : null;
-
-  if (!name) {
+  async function createPersonQuick(fullName, role, generation) {
     try {
-      const { data: p } = await window.sbClient
-        .from('persons').select('full_name, avatar_url').eq('id', personId).maybeSingle();
-      if (p) {
-        name = p.full_name;
-        avatarUrl = p.avatar_url;
+      sb = getSupabase();
+      const payload = {
+        full_name: fullName,
+        gender: role === 'Bố' ? 'Nam' : 'Nữ',
+        generation: generation > 0 ? generation : 1,
+        role_type: 'Huyết thống',
+        special_status: 'Bình thường',
+        is_deleted: false
+      };
+      const { data, error } = await sb.from('persons').insert([payload]).select().single();
+      if (error) throw error;
+      console.log(LOG, 'Tạo mới person:', data);
+      return data.id;
+    } catch (e) {
+      console.error(LOG, 'createPersonQuick', e);
+      alert('Không tạo được người mới: ' + e.message);
+      return null;
+    }
+  }
+
+  // ============================================================
+  // SAVE PERSON
+  // ============================================================
+  window.savePerson = async function () {
+    console.log(LOG, 'savePerson');
+    try {
+      sb = getSupabase();
+      const payload = {
+        full_name: $('personName')?.value.trim(),
+        gender: $('personGender')?.value || null,
+        generation: parseInt($('personGeneration')?.value || '0') || null,
+        birth_year: parseInt($('personBirthYear')?.value || '0') || null,
+        death_year: parseInt($('personDeathYear')?.value || '0') || null,
+        branch: $('personBranch')?.value.trim() || null,
+        hometown: $('personHometown')?.value.trim() || null,
+        occupation: $('personOccupation')?.value.trim() || null,
+        bio: $('personBio')?.value.trim() || null,
+        is_deleted: false
+      };
+      if (!payload.full_name) { alert('Vui lòng nhập họ tên'); return; }
+
+      let personId = currentEditingPersonId;
+      if (personId) {
+        // UPDATE
+        const { error } = await sb.from('persons').update(payload).eq('id', personId);
+        if (error) throw error;
+      } else {
+        // INSERT
+        const { data, error } = await sb.from('persons').insert([payload]).select().single();
+        if (error) throw error;
+        personId = data.id;
       }
-    } catch (err) {
-      console.warn('Không lấy được tên:', err);
+
+      // Update parent_child (Bố, Mẹ)
+      await saveParentLinks(personId);
+
+      // Update spouse links
+      await saveSpouseLinks(personId);
+
+      alert('Đã lưu!');
+      closePersonForm();
+      if (typeof window.refreshAll === 'function') window.refreshAll();
+      else location.reload();
+    } catch (e) {
+      console.error(LOG, 'savePerson', e);
+      alert('Lỗi lưu: ' + e.message);
     }
-  }
-  if (!name) name = 'người này';
+  };
 
-  const ok = confirm(
-    '🗑️ XOÁ VĨNH VIỄN: "' + name + '"\n\n' +
-    'Sẽ xoá:\n' +
-    '• Hồ sơ cá nhân\n' +
-    '• Tất cả liên kết cha-mẹ-con\n' +
-    '• Tất cả liên kết vợ-chồng\n' +
-    '• Tất cả liên kết bài viết\n' +
-    '• Ảnh đại diện\n\n' +
-    'Không thể hoàn tác. Tiếp tục?'
-  );
-  if (!ok) return;
-
-  try {
-    const avatarPath = urlToStoragePath(avatarUrl);
-
-    await window.sbClient.from('parent_child').delete()
-      .or('parent_id.eq.' + personId + ',child_id.eq.' + personId);
-
-    await window.sbClient.from('marriages').delete()
-      .or('husband_id.eq.' + personId + ',wife_id.eq.' + personId);
-
-    await window.sbClient.from('person_notes').delete()
-      .eq('person_id', personId);
-
-    const { error } = await window.sbClient
-      .from('persons').delete().eq('id', personId);
-    if (error) throw error;
-
-    if (avatarPath) {
-      window.sbClient.storage.from('avatars').remove([avatarPath])
-        .then(({ error }) => { if (error) console.warn('Avatar xoá lỗi:', error); })
-        .catch(err => console.warn(err));
-    }
-
-    // v3.4.3 — Refresh danh sách ngay lập tức
-    await refreshPersonList();
-
-    alert('✅ Đã xoá "' + name + '"');
-
-    hideModal('personFormModal');
-    document.body.style.overflow = '';
-    currentEditingPersonId = null;
-    currentViewMode = 'view';
-
-  } catch (err) {
-    console.error('Lỗi xóa:', err);
-    alert('❌ Lỗi khi xóa:\n\n' + err.message);
-  }
-}
-
-/* ============================================
-   16. TẠO LIÊN KẾT CHA-MẸ ↔ CON
-   ============================================ */
-async function createParentChildLink(parentId, childId, role) {
-  if (!window.sbClient || !parentId || !childId) return;
-
-  try {
-    const { data: existing } = await window.sbClient
-      .from('parent_child').select('id')
-      .eq('parent_id', parentId).eq('child_id', childId).maybeSingle();
-
-    if (existing) return;
-
-    const { error } = await window.sbClient
-      .from('parent_child')
-      .insert({ parent_id: parentId, child_id: childId, parent_role: role });
-
-    if (error && error.code !== '23505') throw error;
-
-  } catch (err) {
-    console.error('Lỗi createParentChildLink:', err);
-  }
-}
-
-/* ============================================
-   17. TẠO LIÊN KẾT HÔN NHÂN
-   ============================================ */
-async function createMarriageLink(personId, spouseId, personGender, order) {
-  if (!window.sbClient || !personId || !spouseId) return;
-  if (personId === spouseId) return;
-
-  try {
-    let husbandId, wifeId;
-    if (personGender === 'Nam') {
-      husbandId = personId; wifeId = spouseId;
-    } else if (personGender === 'Nữ') {
-      husbandId = spouseId; wifeId = personId;
-    } else {
-      husbandId = personId; wifeId = spouseId;
-    }
-
-    const { data: existing } = await window.sbClient
-      .from('marriages').select('id')
-      .or('and(husband_id.eq.' + husbandId + ',wife_id.eq.' + wifeId + '),' +
-          'and(husband_id.eq.' + wifeId + ',wife_id.eq.' + husbandId + ')')
-      .maybeSingle();
-
-    if (existing) return;
-
-    const { error } = await window.sbClient
-      .from('marriages')
-      .insert({ husband_id: husbandId, wife_id: wifeId, marriage_order: order || 1 });
-
-    if (error && error.code !== '23505') throw error;
-
-  } catch (err) {
-    console.error('Lỗi createMarriageLink:', err);
-  }
-}
-
-/* ============================================
-   18. TẠO CON + TỰ ĐỘNG TẠO HỒ SƠ ĐỜI SAU
-   ============================================ */
-async function createChildWithAutoCreate(child, parentId, parentGender) {
-  if (!window.sbClient || !child || !parentId) return;
-
-  try {
-    const parent = tempOriginalPerson;
-    const parentGen = parent && parent.generation ? parent.generation : null;
-    const childGen = parentGen ? parentGen + 1 : null;
-
-    let childBranch = null;
-    if (parentGender === 'Nam' && parent) {
-      childBranch = parent.branch || null;
-    } else if (parent) {
-      const { data: marriages } = await window.sbClient
-        .from('marriages').select('husband_id')
-        .eq('wife_id', parentId).maybeSingle();
-      if (marriages) {
-        const { data: husband } = await window.sbClient
-          .from('persons').select('branch').eq('id', marriages.husband_id).maybeSingle();
-        if (husband) childBranch = husband.branch;
+  async function saveParentLinks(personId) {
+    try {
+      const fatherId = $('personFatherId')?.value;
+      const motherId = $('personMotherId')?.value;
+      // Xoá links cũ
+      await sb.from('parent_child').delete().eq('child_id', personId);
+      // Thêm links mới
+      const inserts = [];
+      if (fatherId) inserts.push({
+        parent_id: fatherId, child_id: personId,
+        parent_role: 'Bố', relation: 'Con chung',
+        child_type: 'Con chung', is_family_member: true
+      });
+      if (motherId) inserts.push({
+        parent_id: motherId, child_id: personId,
+        parent_role: 'Mẹ', relation: 'Con chung',
+        child_type: 'Con chung', is_family_member: true
+      });
+      if (inserts.length) {
+        const { error } = await sb.from('parent_child').insert(inserts);
+        if (error) throw error;
+        console.log(LOG, 'Đã lưu parent_child:', inserts.length);
       }
-    }
-
-    const childData = {
-      full_name: capitalizeVietnameseName(child.full_name),
-      gender: child.gender,
-      birth_year: child.birth_year,
-      sibling_order: child.sibling_order,
-      generation: childGen,
-      branch: childBranch,
-      special_status: 'Bình thường',
-      created_by: window.currentUser ? window.currentUser.id : null,
-      created_by_name: capitalizeVietnameseName(
-        document.getElementById('createdByName')
-          ? document.getElementById('createdByName').value.trim() : ''
-      ) || null
-    };
-
-    const { data: inserted, error } = await window.sbClient
-      .from('persons').insert(childData).select('id').single();
-    if (error) throw error;
-
-    const childId = inserted.id;
-
-    if (parentGender === 'Nam') {
-      await createParentChildLink(parentId, childId, 'Bố');
-    } else if (parentGender === 'Nữ') {
-      await createParentChildLink(parentId, childId, 'Mẹ');
-    } else {
-      await createParentChildLink(parentId, childId, 'Bố');
-    }
-
-    const spouses = getSpouseRowsData();
-    if (spouses.length > 0 && child.child_type === 'Con chung') {
-      const spouseId = spouses[0].personId;
-      const otherRole = parentGender === 'Nam' ? 'Mẹ' : 'Bố';
-      await createParentChildLink(spouseId, childId, otherRole);
-    }
-
-  } catch (err) {
-    console.error('Lỗi createChildWithAutoCreate:', err);
-    throw err;
+    } catch (e) { console.error(LOG, 'saveParentLinks', e); }
   }
-}
 
-/* ============================================
-   KẾT THÚC
-   ============================================ */
+  async function saveSpouseLinks(personId) {
+    try {
+      const selects = document.querySelectorAll('#spouseRows .spouse-select');
+      const spouseIds = Array.from(selects).map(s => s.value).filter(Boolean);
+      const person = tempOriginalPerson;
+      const gender = person?.gender || $('personGender')?.value;
 
-console.log('📝 Form.js v3.4.3 — Fix refresh sau khi xoá/lưu');
+      // Xoá marriages cũ
+      await sb.from('marriages').delete()
+        .or(`husband_id.eq.${personId},wife_id.eq.${personId}`);
+
+      // Thêm mới
+      let order = 1;
+      for (const spId of spouseIds) {
+        const isHusband = gender === 'Nam';
+        const payload = {
+          husband_id: isHusband ? personId : spId,
+          wife_id: isHusband ? spId : personId,
+          marriage_order: order++,
+          status: 'Chính thất'
+        };
+        const { error } = await sb.from('marriages').insert([payload]);
+        if (error) console.error(LOG, 'insert marriage', error);
+      }
+    } catch (e) { console.error(LOG, 'saveSpouseLinks', e); }
+  }
+
+  // ---------- EXPOSE ----------
+  window.resetForm = resetForm;
+  window.showViewMode = showViewMode;
+  window.showEditMode = showEditMode;
+})();
