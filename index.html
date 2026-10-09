@@ -117,21 +117,22 @@
       <img src="banner-pha-do.png" alt="Banner Phả đồ" onerror="this.style.display='none'">
       <button class="banner-add-btn" title="Thêm cá nhân mới" onclick="openPersonForm()">+</button>
     </div>
-
     <div class="card" style="padding: 12px;">
       <div class="pedigree-wrap">
         <div class="pedigree-toolbar">
-          <button class="pedigree-btn" id="pedZoomIn"    title="Phóng to">＋</button>
-          <button class="pedigree-btn" id="pedZoomOut"   title="Thu nhỏ">−</button>
-          <button class="pedigree-btn" id="pedZoomReset" title="Về mặc định">⟲</button>
-          <button class="pedigree-btn" id="pedFocusMy"   title="Focus Phạm Văn Mỹ">★ Mỹ</button>
-          <span class="pedigree-hint">💡 Cuộn = zoom • Kéo = di chuyển • Đúp chuột = mở Danh tính</span>
+          <button class="pedigree-btn" id="pd-zoom-in" title="Phóng to">＋</button>
+          <button class="pedigree-btn" id="pd-zoom-out" title="Thu nhỏ">−</button>
+          <button class="pedigree-btn" id="pd-reset" title="Về mặc định">⟲</button>
+          <select class="pedigree-btn" id="pd-branch-filter" title="Lọc theo chi" style="padding: 4px 8px;">
+            <option value="__all__">Tất cả các chi</option>
+          </select>
+          <span class="pedigree-hint">🖱️ Cuộn = zoom • Kéo = di chuyển • Đúp chuột = mở Danh tính</span>
         </div>
-        <svg id="pedigree-svg"></svg>
-        <div id="pedigree-tooltip" class="pedigree-tooltip"></div>
-        <div id="pedigree-loading" class="pedigree-loading">Đang tải phả đồ...</div>
+
+        <div id="pha-do-svg" style="width:100%; height:600px; overflow:hidden; background:#FDFBF6; border-radius:8px;"></div>
       </div>
     </div>
+   
   </section>
 
   <section class="tab-content" id="tab-ngoai-pha" style="display:none">
