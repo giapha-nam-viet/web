@@ -220,8 +220,11 @@
         byCol.get(col).push(c);
       });
 
-      // Sắp xếp con theo birth_order trong mỗi cột
-      byCol.forEach(arr => arr.sort((a, b) => (a.birth_order || 0) - (b.birth_order || 0)));
+byCol.forEach(arr => arr.sort((a, b) => {
+  const ao = a.birth_order ?? a.sibling_order ?? 9999;
+  const bo = b.birth_order ?? b.sibling_order ?? 9999;
+  return ao - bo;
+}));
 
       // Tính vị trí con: cột * stepX, hàng dưới
       const sortedCols = Array.from(byCol.keys()).sort((a, b) => a - b);
