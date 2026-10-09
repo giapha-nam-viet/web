@@ -1,310 +1,318 @@
 /* ============================================================
-   pedigree.js v5.0 — Lớp 1: Phả đồ phổ quát (layout DỌC)
-   Nguyên tắc: DATA DRIVES THE VIEW — không hardcode gì
+   pedigree.js v5.1 — Lớp 1: Phả đồ phổ quát (layout DỌC)
+   Schema thật: persons, parent_child, marriages
+   - role_type: 'Huyết thống' | 'Dâu/Rể'
+   - special_status: 'Bình thường' | 'Không rõ' | 'Mất sớm'
+   - parent_role: 'Bố' | 'Mẹ'
    ============================================================ */
 (function () {
   'use strict';
-
   const LOG = '[Pedigree]';
-  console.log(LOG, 'v5.0 loaded');
+  console.log(LOG, 'v5.1 loaded');
 
   // ---------- CONFIG ----------
   const CFG = {
-    node:   { w: 180, h: 56 },
-    gapX:   60,          // khoảng cách giữa các cột chi
-    gapY:   90,          // khoảng cách giữa các đời
-    padding: 80,         // padding quanh SVG
+    node:    { w: 180, h: 56 },
+    gapX:    60,
+    gapY:    90,
+    padding: 80,
+    spouseGap: 6,        // khoảng cách giữa các node trong khối hôn nhân
     colors: {
-      blood:      { stroke: '#88a9ad', fill: '#F5FAFA' },
-      spouse:     { stroke: '#b4c8ca', fill: '#F8FBFB' },
-      focus:      { stroke: '#88a9ad', fill: '#FFF9E6', glow: '#F2C94C' },
-      faded:      { opacity: 0.5 },
-      linkBlood:  '#bd9733',
-      linkMarry:  '#C97A7A'
+      blood:  { stroke: '#88a9ad', fill: '#F5FAFA' },
+      spouse: { stroke: '#b4c8ca', fill: '#F8FBFB' },
+      focus:  { stroke: '#88a9ad', fill: '#FFF9E6' },
+      linkBlood: '#bd9733',
+      linkMarry: '#C97A7A'
     },
     zoom: { step: 0.15, min: 0.3, max: 2.5 },
-    focusName: 'Phạm Văn Mỹ'   // sẽ match theo full_name (chuẩn hoá)
+    focusName: 'Phạm Văn Mỹ'
   };
 
   // ---------- STATE ----------
   let sb, svg, gRoot, zoomBehavior;
   let persons = [], parentChild = [], marriages = [];
-  let tree = null;       // { roots, byId, generations, branches }
+  let tree = null;
   let currentScale = 1;
+  let layoutData = null;
+
+  // ---------- HELPERS ----------
+  function isBlood(p) { return p && p.role_type === 'Huyết thống'; }
+  function isSpouse(p) { return p && p.role_type === 'Dâu/Rể'; }
+  function isFaded(p) {
+    return p && (p.special_status === 'Mất sớm' || p.special_status === 'Không rõ');
+  }
+  function fadedLabel(p) {
+    if (!p) return '';
+    if (p.special_status === 'Mất sớm') return 'mất sớm';
+    if (p.special_status === 'Không rõ') return 'thất lạc';
+    return '';
+  }
 
   // ---------- ENTRY ----------
   function init() {
     console.log(LOG, 'init()');
     try {
       sb = window.appSupabase || window.sbClient;
-      if (!sb) { console.error(LOG, 'Supabase client chưa sẵn sàng'); return; }
-
+      if (!sb) { console.error(LOG, 'Supabase chưa sẵn sàng'); return; }
       const container = document.getElementById('pha-do-svg');
       if (!container) { console.warn(LOG, 'Không tìm thấy #pha-do-svg'); return; }
 
       setupToolbar();
-      loadAll().then(() => {
-        tree = buildTree(persons, parentChild, marriages);
-        if (!tree || !tree.roots.length) {
-          console.warn(LOG, 'Không có dữ liệu để vẽ');
-          return;
-        }
-        render(container);
-        autoFocus();
-      }).catch(err => console.error(LOG, 'loadAll error', err));
-    } catch (e) {
-      console.error(LOG, 'init crash', e);
-    }
+      loadAll()
+        .then(() => {
+          tree = buildTree(persons, parentChild, marriages);
+          if (!tree || !tree.roots.length) { console.warn(LOG, 'Không có data'); return; }
+          render(container);
+          fillBranchDropdown();
+          autoFocus();
+        })
+        .catch(err => console.error(LOG, 'loadAll error', err));
+    } catch (e) { console.error(LOG, 'init crash', e); }
   }
 
-  // ---------- 1) LOAD DATA ----------
+  // ---------- 1) LOAD ----------
   async function loadAll() {
     console.log(LOG, 'loadAll...');
-    try {
-      const [p, pc, m] = await Promise.all([
-        sb.from('persons').select('*'),
-        sb.from('parent_child').select('*'),
-        sb.from('marriages').select('*')
-      ]);
-      if (p.error)  throw p.error;
-      if (pc.error) throw pc.error;
-      if (m.error)  throw m.error;
-      persons     = p.data  || [];
-      parentChild = pc.data || [];
-      marriages   = m.data  || [];
-      console.log(LOG, `loaded: ${persons.length} persons, ${parentChild.length} links, ${marriages.length} marriages`);
-    } catch (e) {
-      console.error(LOG, 'loadAll failed', e);
-      throw e;
-    }
+    const [p, pc, m] = await Promise.all([
+      sb.from('persons').select('*').eq('is_deleted', false),
+      sb.from('parent_child').select('*'),
+      sb.from('marriages').select('*')
+    ]);
+    if (p.error) throw p.error;
+    if (pc.error) throw pc.error;
+    if (m.error) throw m.error;
+    persons = p.data || [];
+    parentChild = pc.data || [];
+    marriages = m.data || [];
+    console.log(LOG, `loaded: ${persons.length} persons, ${parentChild.length} links, ${marriages.length} marriages`);
   }
 
   // ---------- 2) BUILD TREE ----------
-  // Tìm cụ tổ = generation nhỏ nhất & không có cha mẹ
-  // Nhóm theo branch (Chi). Chi nào không có branch → "Khác"
   function buildTree(persons, pcLinks, marriages) {
     console.log(LOG, 'buildTree...');
     const byId = new Map(persons.map(p => [String(p.id), p]));
-    const childrenOf = new Map();   // parentId -> [childId]
-    const parentsOf  = new Map();   // childId  -> [parentId]
+
+    // childrenOf: parentId → [childId]  (chỉ 1 role/1 con)
+    // Ưu tiên Bố; nếu không có Bố thì dùng Mẹ
+    const childrenOf = new Map();
+    const parentsOf = new Map();
+    // Gom 2 nhóm theo child
+    const childToFather = new Map();
+    const childToMother = new Map();
     pcLinks.forEach(l => {
       const pid = String(l.parent_id), cid = String(l.child_id);
+      if (!byId.has(pid) || !byId.has(cid)) return;
+      if (l.parent_role === 'Bố') childToFather.set(cid, pid);
+      else if (l.parent_role === 'Mẹ') childToMother.set(cid, pid);
+    });
+    // Xác định parent chính cho mỗi con
+    const allChildren = new Set([...childToFather.keys(), ...childToMother.keys()]);
+    allChildren.forEach(cid => {
+      const pid = childToFather.get(cid) || childToMother.get(cid);
+      if (!pid) return;
       if (!childrenOf.has(pid)) childrenOf.set(pid, []);
-      if (!parentsOf.has(cid))  parentsOf.set(cid, []);
       childrenOf.get(pid).push(cid);
-      parentsOf.get(cid).push(pid);
+      // parentsOf: nếu có cả Bố lẫn Mẹ, lưu cả 2
+      const arr = [];
+      if (childToFather.has(cid)) arr.push(childToFather.get(cid));
+      if (childToMother.has(cid)) arr.push(childToMother.get(cid));
+      parentsOf.set(cid, arr);
     });
 
-    const spousesOf = new Map();    // personId -> [{spouseId, order}]
+    // spousesOf
+    const spousesOf = new Map();
     marriages.forEach(m => {
       const h = String(m.husband_id), w = String(m.wife_id);
       const ord = m.marriage_order || 0;
+      if (!byId.has(h) || !byId.has(w)) return;
       if (!spousesOf.has(h)) spousesOf.set(h, []);
       if (!spousesOf.has(w)) spousesOf.set(w, []);
       spousesOf.get(h).push({ spouseId: w, order: ord });
       spousesOf.get(w).push({ spouseId: h, order: ord });
     });
 
-    // Cụ tổ: generation nhỏ nhất & không có parents
-    const roots = persons
-      .filter(p => !parentsOf.has(String(p.id)))
-      .sort((a, b) => (a.generation || 0) - (b.generation || 0));
-    if (!roots.length) return null;
+    // Cụ tổ: generation nhỏ nhất + không có parentsOf
+    const rootsAll = persons.filter(p => !parentsOf.has(String(p.id)));
+    rootsAll.sort((a, b) => (a.generation || 0) - (b.generation || 0));
+    if (!rootsAll.length) return null;
+    const minGen = rootsAll[0].generation || 1;
+    // Chỉ lấy cụ tổ là huyết thống, generation = minGen
+    const rootPersons = rootsAll.filter(p => (p.generation || 0) === minGen && isBlood(p));
+    if (!rootPersons.length) {
+      // fallback: nếu không có huyết thống, lấy người đầu
+      rootPersons.push(rootsAll[0]);
+    }
 
-    const minGen = roots[0].generation || 1;
-    const rootPersons = roots.filter(p => (p.generation || 0) === minGen);
-
-    // Gom chi (branch) — chỉ lấy từ data
+    // Chi (branch) — từ persons có branch, không NULL
     const branchSet = new Set();
-    persons.forEach(p => { if (p.branch) branchSet.add(p.branch); });
+    persons.forEach(p => { if (p.branch && p.branch.trim()) branchSet.add(p.branch.trim()); });
     const branches = Array.from(branchSet).sort();
 
+    console.log(LOG, `tree: ${rootPersons.length} roots, ${branches.length} branches:`, branches);
     return { byId, childrenOf, parentsOf, spousesOf, roots: rootPersons, branches, minGen };
   }
 
-  // ---------- 3) COMPUTE LAYOUT (DỌC) ----------
-  // Trả về: { nodes: [{id, x, y, w, h, type, person, spouse?}], links: [...] }
+  // ---------- 3) COMPUTE LAYOUT ----------
   function computeLayout(tree) {
     console.log(LOG, 'computeLayout...');
     const { byId, childrenOf, parentsOf, spousesOf, roots, branches, minGen } = tree;
-    const { w: NW, h: NH } = CFG.node;
-    const stepY = NH + CFG.gapY;
+    const NW = CFG.node.w, NH = CFG.node.h;
     const stepX = NW + CFG.gapX;
+    const stepY = NH + CFG.gapY;
 
-    // Bước 1: xác định mỗi người thuộc cột chi nào
-    // - Người Đời 1 (cụ tổ + vợ) → cột 0 (cột "Tổ")
-    // - Người Đời ≥2 có branch → cột theo branch
-    // - Người không có branch (Bông/Thụ) → cột "Khác" cuối
+    // Cột theo chi
     const colOfBranch = new Map();
-    colOfBranch.set('__TO__', 0);
-    branches.forEach((b, i) => colOfBranch.set(b, i + 1));
-    colOfBranch.set('__KHAC__', branches.length + 1);
+    branches.forEach((b, i) => colOfBranch.set(b, i));
+    // Cột "Tổ" (Đời 1) đứng riêng bên trái
+    // Con của cụ tổ sẽ nằm ở các cột chi tương ứng
 
     function colOf(p) {
       if (!p) return 0;
-      if ((p.generation || 0) <= minGen) return 0;
+      if ((p.generation || 0) <= minGen) return -1; // Đời 1 không thuộc chi nào
       if (p.branch && colOfBranch.has(p.branch)) return colOfBranch.get(p.branch);
-      return colOfBranch.get('__KHAC__');
+      return branches.length; // cột "Khác"
     }
 
-    // Bước 2: đệ quy tính y theo generation
-    // Mỗi khối hôn nhân = [chồng, vợ1, vợ2, ...] xếp dọc
-    // Con nối từ đáy khối hôn nhân
     const nodes = [];
     const links = [];
     const placed = new Set();
 
-    function blockHeight(p) {
-      const spouses = spousesOf.get(String(p.id)) || [];
-      return (1 + spouses.length) * NH + (spouses.length > 0 ? spouses.length * 4 : 0);
-    }
-
-    // Đặt đệ quy 1 người (huyết thống) + vợ/chồng
+    // Đặt 1 người + vợ/chồng (block hôn nhân)
     function placePerson(p, x, yTop) {
-      if (placed.has(String(p.id))) return;
+      if (!p || placed.has(String(p.id))) return;
       const spouses = (spousesOf.get(String(p.id)) || [])
         .sort((a, b) => (a.order || 0) - (b.order || 0));
 
-      // Node chồng
+      // Chồng / người huyết thống
       nodes.push({
         id: String(p.id), person: p, spouse: null,
-        x, y: yTop, w: NW, h: NH, type: 'blood'
+        x, y: yTop, w: NW, h: NH,
+        type: isBlood(p) ? 'blood' : 'spouse'
       });
       placed.add(String(p.id));
 
-      // Các node vợ/chồng xếp dọc bên dưới
-      let yCur = yTop + NH + 4;
-      spouses.forEach((s, idx) => {
+      // Vợ/chồng xếp dọc bên dưới
+      let yCur = yTop + NH + CFG.spouseGap;
+      spouses.forEach(s => {
         const sp = byId.get(s.spouseId);
         if (!sp || placed.has(String(sp.id))) return;
         nodes.push({
           id: String(sp.id), person: sp, spouse: p,
-          x, y: yCur, w: NW, h: NH, type: 'spouse'
+          x, y: yCur, w: NW, h: NH,
+          type: 'spouse'
         });
         placed.add(String(sp.id));
-        yCur += NH + 4;
+        yCur += NH + CFG.spouseGap;
       });
 
-      // Đáy khối hôn nhân
       const blockBottom = yCur;
 
-      // Con: gom tất cả con của p (từ parent_child) — KHÔNG phân biệt vợ nào
-      const childIds = childrenOf.get(String(p.id)) || [];
-      if (!childIds.length) return;
-
-      // Tính vị trí con theo cột chi
-      const childGap = 12;
-      let xCursor = x;
-      // Nhóm con theo cột để xếp hàng ngang
-      const childrenByCol = new Map();
-      childIds.forEach(cid => {
-        const c = byId.get(String(cid));
-        if (!c) return;
+      // Con — gom theo cột chi
+      const childIds = (childrenOf.get(String(p.id)) || [])
+        .map(cid => byId.get(cid))
+        .filter(Boolean);
+      // Dedupe con theo cột: 1 con/1 cột
+      const seenCol = new Set();
+      const byCol = new Map();
+      childIds.forEach(c => {
         const col = colOf(c);
-        if (!childrenByCol.has(col)) childrenByCol.set(col, []);
-        childrenByCol.get(col).push(c);
+        if (!byCol.has(col)) byCol.set(col, []);
+        byCol.get(col).push(c);
       });
 
-      // Sắp xếp cột tăng dần, mỗi cột 1 con → x = col * stepX + padding
-      const sortedCols = Array.from(childrenByCol.keys()).sort((a, b) => a - b);
+      // Sắp xếp con theo birth_order trong mỗi cột
+      byCol.forEach(arr => arr.sort((a, b) => (a.birth_order || 0) - (b.birth_order || 0)));
+
+      // Tính vị trí con: cột * stepX, hàng dưới
+      const sortedCols = Array.from(byCol.keys()).sort((a, b) => a - b);
       sortedCols.forEach(col => {
-        const kids = childrenByCol.get(col);
-        kids.forEach((c, i) => {
-          const cx = col * stepX + CFG.padding;
-          const cy = blockBottom + CFG.gapY;
-          // Link từ đáy khối hôn nhân → node con
+        const kids = byCol.get(col);
+        const cx = (col === -1 ? 0 : col) * stepX + CFG.padding;
+        // Con cùng cột nhưng khác chi → xếp cùng hàng, mở rộng cột
+        kids.forEach((c, idx) => {
+          const childX = cx + idx * (NW + 8);
+          const childY = blockBottom + CFG.gapY - NH;
+          // Link từ đáy khối hôn nhân
           links.push({
             from: { x: x + NW / 2, y: blockBottom },
-            to:   { x: cx + NW / 2, y: cy },
+            to: { x: childX + NW / 2, y: childY },
             type: 'blood'
           });
-          placePerson(c, cx, cy);
+          placePerson(c, childX, childY);
         });
       });
     }
 
-    // Đặt từng cụ tổ (Đời 1) — thường chỉ 1 người
+    // Đặt từng cụ tổ
     roots.forEach((r, i) => {
-      const x = i * stepX + CFG.padding;
+      const x = i * (NW + 40) + 20;
       placePerson(r, x, CFG.padding);
     });
 
-    // Link hôn nhân giữa các cặp (đường dọc nối giữa các node trong cùng khối)
+    // Link hôn nhân (đường dọc nối chồng-vợ trong cùng block)
     nodes.forEach(n => {
       if (n.type !== 'spouse') return;
-      // Tìm node chồng tương ứng
-      const husband = nodes.find(m => m.id === String(n.spouse && n.spouse.id));
-      if (!husband) return;
-      // Vẽ đường dọc nối tâm 2 node (nét đứt)
+      const husbandNode = nodes.find(m => m.id === String(n.spouse && n.spouse.id));
+      if (!husbandNode) return;
       links.push({
-        from: { x: husband.x + NW / 2, y: husband.y + NH },
-        to:   { x: n.x + NW / 2, y: n.y },
+        from: { x: husbandNode.x + NW / 2, y: husbandNode.y + NH },
+        to: { x: n.x + NW / 2, y: n.y },
         type: 'marry'
       });
     });
 
-    // Tính bounding box
-    const maxX = Math.max(...nodes.map(n => n.x + n.w)) + CFG.padding;
-    const maxY = Math.max(...nodes.map(n => n.y + n.h)) + CFG.padding;
+    const maxX = Math.max(...nodes.map(n => n.x + n.w), 200) + CFG.padding;
+    const maxY = Math.max(...nodes.map(n => n.y + n.h), 200) + CFG.padding;
 
     return { nodes, links, width: maxX, height: maxY };
   }
 
-  // ---------- 4) RENDER SVG ----------
+  // ---------- 4) RENDER ----------
   function render(container) {
     console.log(LOG, 'render...');
     try {
-      // Xoá cũ
       container.innerHTML = '';
-
-      const layout = computeLayout(tree);
-      const { nodes, links, width, height } = layout;
+      layoutData = computeLayout(tree);
+      const { nodes, links, width, height } = layoutData;
       console.log(LOG, `layout: ${nodes.length} nodes, ${links.length} links, ${width}×${height}`);
 
-      svg = d3.select(container)
-        .append('svg')
-        .attr('width', '100%')
-        .attr('height', '100%')
+      svg = d3.select(container).append('svg')
+        .attr('width', '100%').attr('height', '100%')
         .attr('viewBox', `0 0 ${width} ${height}`)
         .attr('preserveAspectRatio', 'xMidYMid meet');
 
-      // Định nghĩa filter glow cho node focus
+      // glow
       const defs = svg.append('defs');
       const glow = defs.append('filter').attr('id', 'focus-glow');
-      glow.append('feGaussianBlur').attr('stdDeviation', '4').attr('result', 'coloredBlur');
+      glow.append('feGaussianBlur').attr('stdDeviation', '5').attr('result', 'blur');
       const merge = glow.append('feMerge');
-      merge.append('feMergeNode').attr('in', 'coloredBlur');
+      merge.append('feMergeNode').attr('in', 'blur');
       merge.append('feMergeNode').attr('in', 'SourceGraphic');
 
       gRoot = svg.append('g').attr('class', 'pedigree-root');
 
-      // Vẽ links trước
+      // Links
       const linkG = gRoot.append('g').attr('class', 'links');
-      linkG.selectAll('path')
-        .data(links)
-        .enter().append('path')
+      linkG.selectAll('path').data(links).enter().append('path')
         .attr('d', d => {
-          // Link hôn nhân: đường dọc thẳng
-          if (d.type === 'marry') {
-            return `M${d.from.x},${d.from.y} L${d.to.x},${d.to.y}`;
-          }
-          // Link huyết thống: elbow (vuông góc)
+          if (d.type === 'marry') return `M${d.from.x},${d.from.y} L${d.to.x},${d.to.y}`;
           const midY = (d.from.y + d.to.y) / 2;
           return `M${d.from.x},${d.from.y} V${midY} H${d.to.x} V${d.to.y}`;
         })
         .attr('fill', 'none')
         .attr('stroke', d => d.type === 'marry' ? CFG.colors.linkMarry : CFG.colors.linkBlood)
         .attr('stroke-width', d => d.type === 'marry' ? 1.5 : 2)
-        .attr('stroke-dasharray', d => d.type === 'marry' ? '5,4' : null);
+        .attr('stroke-dasharray', d => d.type === 'marry' ? '5,4' : null)
+        .attr('opacity', 0.7);
 
-      // Vẽ nodes
+      // Nodes
       const nodeG = gRoot.append('g').attr('class', 'nodes');
-      const node = nodeG.selectAll('g.node')
-        .data(nodes, d => d.id)
-        .enter().append('g')
+      const node = nodeG.selectAll('g.node').data(nodes, d => d.id).enter().append('g')
         .attr('class', d => `node node-${d.type}`)
         .attr('transform', d => `translate(${d.x},${d.y})`)
+        .attr('data-name', d => (d.person.full_name || '').trim())
         .style('cursor', 'pointer')
+        .style('opacity', d => isFaded(d.person) ? 0.55 : 1)
         .on('click', (evt, d) => {
           evt.stopPropagation();
           if (window.PedigreePanel) window.PedigreePanel.show(d.person);
@@ -314,52 +322,40 @@
           if (window.PedigreeLayer2) window.PedigreeLayer2.focus(d.person);
         });
 
-      // Rect
       node.append('rect')
-        .attr('width', d => d.w)
-        .attr('height', d => d.h)
-        .attr('rx', 10)
-        .attr('ry', 10)
+        .attr('width', d => d.w).attr('height', d => d.h)
+        .attr('rx', 10).attr('ry', 10)
         .attr('fill', d => d.type === 'spouse' ? CFG.colors.spouse.fill : CFG.colors.blood.fill)
         .attr('stroke', d => d.type === 'spouse' ? CFG.colors.spouse.stroke : CFG.colors.blood.stroke)
-        .attr('stroke-width', 2);
+        .attr('stroke-width', d => d.type === 'spouse' ? 1.5 : 2.5);
 
-      // Text tên
       node.append('text')
-        .attr('x', d => d.w / 2)
-        .attr('y', 22)
+        .attr('x', d => d.w / 2).attr('y', 22)
         .attr('text-anchor', 'middle')
-        .attr('font-size', 13)
-        .attr('font-weight', 600)
+        .attr('font-size', 13).attr('font-weight', 600)
         .attr('fill', '#2c3e3f')
         .text(d => d.person.full_name || '?');
 
-      // Text năm sinh/mất
       node.append('text')
-        .attr('x', d => d.w / 2)
-        .attr('y', 40)
+        .attr('x', d => d.w / 2).attr('y', 40)
         .attr('text-anchor', 'middle')
-        .attr('font-size', 11)
-        .attr('fill', '#6b7c7d')
+        .attr('font-size', 11).attr('fill', '#6b7c7d')
         .text(d => {
-          const b = d.person.birth_year || '?';
-          const m = d.person.death_year;
-          return m ? `${b} – ${m}` : (b !== '?' ? `${b} –` : '');
+          const b = d.person.birth_year, m = d.person.death_year;
+          if (b && m) return `${b} – ${m}`;
+          if (b) return `${b} –`;
+          return '';
         });
 
-      // Mờ node thất lạc / mất sớm
-      node.filter(d => d.person.status === 'lost' || d.person.status === 'died_young')
-        .style('opacity', CFG.colors.faded.opacity)
-        .append('text')
-        .attr('x', d => d.w / 2)
-        .attr('y', d => d.h - 4)
+      // Label thất lạc/mất sớm
+      node.filter(d => isFaded(d.person)).append('text')
+        .attr('x', d => d.w / 2).attr('y', d => d.h - 4)
         .attr('text-anchor', 'middle')
-        .attr('font-size', 9)
-        .attr('font-style', 'italic')
+        .attr('font-size', 9).attr('font-style', 'italic')
         .attr('fill', '#999')
-        .text(d => d.person.status === 'lost' ? 'thất lạc' : 'mất sớm');
+        .text(d => fadedLabel(d.person));
 
-      // Zoom behavior
+      // Zoom
       zoomBehavior = d3.zoom()
         .scaleExtent([CFG.zoom.min, CFG.zoom.max])
         .on('zoom', evt => {
@@ -368,7 +364,6 @@
         });
       svg.call(zoomBehavior);
 
-      // Lưu lại để toolbar dùng
       window.__pedigreeSvg = svg;
       window.__pedigreeZoom = zoomBehavior;
     } catch (e) {
@@ -379,58 +374,50 @@
   // ---------- 5) TOOLBAR ----------
   function setupToolbar() {
     console.log(LOG, 'setupToolbar...');
-    const btnIn  = document.getElementById('pd-zoom-in');
-    const btnOut = document.getElementById('pd-zoom-out');
-    const btnRst = document.getElementById('pd-reset');
-    const selChi = document.getElementById('pd-branch-filter');
-    if (btnIn)  btnIn.onclick  = () => zoomBy(CFG.zoom.step);
-    if (btnOut) btnOut.onclick = () => zoomBy(-CFG.zoom.step);
-    if (btnRst) btnRst.onclick = () => resetZoom();
-    if (selChi) selChi.onchange = () => filterBranch(selChi.value);
+    const bIn = document.getElementById('pd-zoom-in');
+    const bOut = document.getElementById('pd-zoom-out');
+    const bRst = document.getElementById('pd-reset');
+    const sel = document.getElementById('pd-branch-filter');
+    if (bIn) bIn.onclick = () => zoomBy(CFG.zoom.step);
+    if (bOut) bOut.onclick = () => zoomBy(-CFG.zoom.step);
+    if (bRst) bRst.onclick = () => resetZoom();
+    if (sel) sel.onchange = () => filterBranch(sel.value);
   }
-
-  function zoomBy(delta) {
+  function zoomBy(d) {
     if (!svg || !zoomBehavior) return;
-    const newK = Math.max(CFG.zoom.min, Math.min(CFG.zoom.max, currentScale + delta));
-    svg.transition().duration(200).call(zoomBehavior.scaleTo, newK);
+    const k = Math.max(CFG.zoom.min, Math.min(CFG.zoom.max, currentScale + d));
+    svg.transition().duration(200).call(zoomBehavior.scaleTo, k);
   }
   function resetZoom() {
     if (!svg || !zoomBehavior) return;
     svg.transition().duration(300).call(zoomBehavior.transform, d3.zoomIdentity);
-    autoFocus();
   }
   function filterBranch(branch) {
-    console.log(LOG, 'filterBranch', branch);
     if (!gRoot) return;
     if (!branch || branch === '__all__') {
       gRoot.selectAll('g.node').style('display', null);
       return;
     }
     gRoot.selectAll('g.node').style('display', d => {
-      if (d.type === 'spouse') return null; // vợ/chồng luôn hiện theo chồng
-      if (d.person.branch === branch) return null;
-      if ((d.person.generation || 0) === tree.minGen) return null; // cụ tổ luôn hiện
-      return 'none';
+      if (d.type === 'spouse') return null;
+      if ((d.person.generation || 0) <= tree.minGen) return null;
+      return d.person.branch === branch ? null : 'none';
     });
   }
 
   // ---------- 6) AUTO FOCUS ----------
   function autoFocus() {
-    console.log(LOG, 'autoFocus', CFG.focusName);
     if (!gRoot) return;
     const target = gRoot.selectAll('g.node')
       .filter(d => (d.person.full_name || '').trim() === CFG.focusName);
-    if (target.empty()) {
-      console.warn(LOG, 'Không tìm thấy', CFG.focusName);
-      return;
-    }
+    if (target.empty()) { console.warn(LOG, 'Không tìm thấy', CFG.focusName); return; }
     target.select('rect')
       .attr('fill', CFG.colors.focus.fill)
-      .attr('stroke', CFG.colors.focus.stroke)
       .attr('filter', 'url(#focus-glow)');
+    console.log(LOG, 'autoFocus', CFG.focusName, 'OK');
   }
 
-  // ---------- 7) FILL DROPDOWN CHI ----------
+  // ---------- 7) DROPDOWN ----------
   function fillBranchDropdown() {
     const sel = document.getElementById('pd-branch-filter');
     if (!sel || !tree) return;
@@ -442,18 +429,16 @@
     });
   }
 
-  // ---------- AUTO INIT ----------
-  // Bug đã gặp: IIFE không chạy → dùng setTimeout wrapper
+  // ---------- BOOT ----------
   function boot() {
-    setTimeout(function () { init(); fillBranchDropdown(); }, 400);
+    console.log(LOG, 'boot...');
+    setTimeout(function () { init(); }, 500);
   }
-
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);
   } else {
     boot();
   }
 
-  // Expose ra ngoài
-  window.Pedigree = { init, loadAll, buildTree, computeLayout, render, CFG };
+  window.Pedigree = { init, loadAll, buildTree, computeLayout, render, CFG, getLayout: () => layoutData };
 })();
