@@ -1145,4 +1145,53 @@ body.reorder-mode .person-mini:hover {
   .ped-node .name { font-size: 14px; }
   .ped-node .years { font-size: 12px; }
 }
+/* ============================================================
+   AUTOCOMPLETE BỐ/MẸ — form.js v5.0
+   ============================================================ */
+.autocomplete-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1.5px solid #b4c8ca;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(1, 40, 94, 0.15);
+  max-height: 280px;
+  overflow-y: auto;
+  z-index: 9999;
+  margin-top: 2px;
+}
+.ac-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f4f5;
+  font-size: 14px;
+  color: #01285E;
+  line-height: 1.35;
+  transition: background 0.12s;
+}
+.ac-item:last-child { border-bottom: none; }
+.ac-item:hover, .ac-item:focus { background: #F0F8F9; }
+.ac-item b { font-weight: 600; }
+.ac-gen {
+  display: block;
+  font-size: 11.5px;
+  color: #6b7c7d;
+  margin-top: 2px;
+  font-weight: 400;
+}
+.ac-item--create {
+  color: #C49504;
+  font-weight: 600;
+  border-top: 2px solid #F5EEB3;
+  background: #FFFBF0;
+}
+.ac-item--create:hover { background: #FFF4D6; }
+.ac-item.ac-empty {
+  color: #999;
+  font-style: italic;
+  cursor: default;
+  text-align: center;
+}
 
