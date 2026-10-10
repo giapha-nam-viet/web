@@ -1,36 +1,27 @@
 /* ============================================================
-   form.js v5.0 — Khớp 100% ID trong index.html
-   - Autocomplete Bố/Mẹ (thay select fatherId/motherId)
-   - Form: fullName, gender, generation, branch, birthYear...
-   - Avatar crop với cropper.js
-   - Spouse rows, Add child modal, Quick add modal
-   - Contact rows, Char counter, Linked notes
-   - Đồng bộ schema: parent_child (parent_role = 'Bố'/'Mẹ')
+   form.js v5.0 — BẢN SẠCH (700 dòng)
    ============================================================ */
 (function () {
   'use strict';
   const LOG = '[Form]';
   console.log(LOG, 'v5.0 loaded');
 
-  // ---------- STATE ----------
   let sb;
   let currentEditingPersonId = null;
   let currentViewMode = 'view';
-  let tempAvatarData = null;          // base64 ảnh sau crop
-  let currentEditingAvatarPath = null;// URL ảnh hiện tại
+  let tempAvatarData = null;
+  let currentEditingAvatarPath = null;
   let tempOriginalPerson = null;
-  let allPersonsCache = [];           // cache autocomplete
-  let cropperInstance = null;         // cropper.js
-  let tempLinkedNoteIds = [];         // id bài viết liên kết
-  let tempContactInfo = {};           // {label: value}
+  let allPersonsCache = [];
+  let cropperInstance = null;
+  let tempLinkedNoteIds = [];
+  let tempContactInfo = {};
 
-  // ---------- HELPERS ----------
   function $(id) { return document.getElementById(id); }
   function escHtml(s) {
     if (s == null) return '';
-    return String(s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
   function normalize(s) {
     return (s || '').toLowerCase().normalize('NFD')
@@ -38,9 +29,7 @@
   }
   function getSupabase() { return window.appSupabase || window.sbClient; }
 
-  // ============================================================
-  // OPEN / CLOSE MODAL
-  // ============================================================
+  // ============ OPEN / CLOSE MODAL ============
   window.openPersonForm = function (personId) {
     console.log(LOG, 'openPersonForm', personId);
     sb = getSupabase();
@@ -75,27 +64,20 @@
     tempAvatarData = null;
   };
 
-  // ============================================================
-  // RESET FORM
-  // ============================================================
+  // ============ RESET FORM ============
   function resetForm() {
-    const fieldIds = [
-      'fullName', 'gender', 'generation', 'branch', 'siblingOrder',
-      'birthPlace', 'birthYear', 'deathYear', 'specialStatus',
-      'occupation', 'bio', 'conflictNote', 'createdByName'
-    ];
+    const fieldIds = ['fullName', 'gender', 'generation', 'branch', 'siblingOrder',
+      'birthPlace', 'birthYear', 'deathYear', 'specialStatus', 'occupation',
+      'bio', 'conflictNote', 'createdByName'];
     fieldIds.forEach(id => { const el = $(id); if (el) el.value = ''; });
-    const fatherSearch = $('fatherSearch'); if (fatherSearch) fatherSearch.value = '';
-    const motherSearch = $('motherSearch'); if (motherSearch) motherSearch.value = '';
-    const fatherId = $('fatherId'); if (fatherId) fatherId.value = '';
-    const motherId = $('motherId'); if (motherId) motherId.value = '';
+    ['fatherSearch', 'motherSearch', 'fatherId', 'motherId'].forEach(id => {
+      const el = $(id); if (el) el.value = '';
+    });
     const roleType = $('roleType'); if (roleType) roleType.value = 'Huyết thống';
-
     const spouseRows = $('spouseRows'); if (spouseRows) spouseRows.innerHTML = '';
     const childrenList = $('childrenList'); if (childrenList) childrenList.innerHTML = '<p class="empty-hint">Chưa có con nào.</p>';
     const contactList = $('contactList'); if (contactList) contactList.innerHTML = '';
     const linkedNotes = $('linkedNotesList'); if (linkedNotes) linkedNotes.innerHTML = '<p class="empty-hint">Chưa có bài viết liên kết.</p>';
-
     renderAvatarPreview();
   }
 
@@ -108,9 +90,7 @@
     } catch (e) { el.value = 'hsnampham@gmail.com'; }
   }
 
-  // ============================================================
-  // SHOW VIEW MODE
-  // ============================================================
+  // ============ VIEW MODE ============
   async function showViewMode(personId) {
     try {
       sb = getSupabase();
@@ -119,31 +99,24 @@
       if (viewBody) viewBody.style.display = 'block';
       if (editBody) editBody.style.display = 'none';
 
-      const { data: person, error } = await sb.from('persons')
-        .select('*').eq('id', personId).single();
+      const { data: person, error } = await sb.from('persons').select('*').eq('id', personId).single();
       if (error) throw error;
       tempOriginalPerson = person;
       currentEditingAvatarPath = person.avatar_url || null;
 
-      // Spouses
-      const { data: marr } = await sb.from('marriages')
-        .select('*').or(`husband_id.eq.${personId},wife_id.eq.${personId}`);
+      const { data: marr } = await sb.from('marriages').select('*').or(`husband_id.eq.${personId},wife_id.eq.${personId}`);
       const spouseIds = (marr || []).map(m => m.husband_id === personId ? m.wife_id : m.husband_id);
       let spouseNames = [];
       if (spouseIds.length) {
-        const { data: sps } = await sb.from('persons')
-          .select('id, full_name').in('id', spouseIds);
+        const { data: sps } = await sb.from('persons').select('id, full_name').in('id', spouseIds);
         spouseNames = (sps || []).map(s => s.full_name);
       }
 
-      // Parents
-      const { data: pc } = await sb.from('parent_child')
-        .select('*').eq('child_id', personId);
+      const { data: pc } = await sb.from('parent_child').select('*').eq('child_id', personId);
       let fatherName = '', motherName = '';
       if (pc && pc.length) {
         const parentIds = pc.map(p => p.parent_id);
-        const { data: parents } = await sb.from('persons')
-          .select('id, full_name, generation').in('id', parentIds);
+        const { data: parents } = await sb.from('persons').select('id, full_name, generation').in('id', parentIds);
         pc.forEach(p => {
           const par = (parents || []).find(x => x.id === p.parent_id);
           if (!par) return;
@@ -152,14 +125,11 @@
         });
       }
 
-      // Children
-      const { data: myKids } = await sb.from('parent_child')
-        .select('*').eq('parent_id', personId);
+      const { data: myKids } = await sb.from('parent_child').select('*').eq('parent_id', personId);
       let kidsList = [];
       if (myKids && myKids.length) {
         const kidIds = myKids.map(k => k.child_id);
-        const { data: kids } = await sb.from('persons')
-          .select('id, full_name, generation, gender').in('id', kidIds);
+        const { data: kids } = await sb.from('persons').select('id, full_name, generation, gender').in('id', kidIds);
         kidsList = kids || [];
       }
 
@@ -192,8 +162,7 @@
         ${avatarHtml}
         <h2 class="${nameClass}">${escHtml(person.full_name || '')}</h2>
         <p class="person-view__meta">
-          ${years ? '📅 ' + escHtml(years) + ' • ' : ''}
-          Đời ${person.generation || '?'}
+          ${years ? '📅 ' + escHtml(years) + ' • ' : ''}Đời ${person.generation || '?'}
           ${person.gender ? ' • ' + escHtml(person.gender) : ''}
           ${person.branch ? ' • ' + escHtml(person.branch) : ''}
         </p>
@@ -208,9 +177,7 @@
     `;
   }
 
-  // ============================================================
-  // EDIT MODE
-  // ============================================================
+  // ============ EDIT MODE ============
   function showEditMode() {
     const viewBody = $('personViewBody');
     const editBody = $('personEditBody');
@@ -231,8 +198,7 @@
     if (!currentEditingPersonId) return;
     try {
       sb = getSupabase();
-      const { data: person } = await sb.from('persons')
-        .select('*').eq('id', currentEditingPersonId).single();
+      const { data: person } = await sb.from('persons').select('*').eq('id', currentEditingPersonId).single();
       if (!person) return;
       tempOriginalPerson = person;
       const set = (id, val) => { const el = $(id); if (el) el.value = val ?? ''; };
@@ -252,13 +218,10 @@
       currentEditingAvatarPath = person.avatar_url || null;
       renderAvatarPreview();
 
-      // Load parents → điền vào autocomplete
-      const { data: pc } = await sb.from('parent_child')
-        .select('*').eq('child_id', currentEditingPersonId);
+      const { data: pc } = await sb.from('parent_child').select('*').eq('child_id', currentEditingPersonId);
       if (pc && pc.length) {
         const parentIds = pc.map(p => p.parent_id);
-        const { data: parents } = await sb.from('persons')
-          .select('id, full_name, generation').in('id', parentIds);
+        const { data: parents } = await sb.from('persons').select('id, full_name, generation').in('id', parentIds);
         pc.forEach(p => {
           const par = (parents || []).find(x => x.id === p.parent_id);
           if (!par) return;
@@ -274,18 +237,12 @@
         });
       }
 
-      // Contact info
       tempContactInfo = person.contact_info || {};
       renderContactRows();
-
-      // Linked notes
       tempLinkedNoteIds = person.linked_note_ids || [];
       renderLinkedNotes();
 
-      // Spouses (load marriages)
-      const { data: marr } = await sb.from('marriages')
-        .select('*').or(`husband_id.eq.${currentEditingPersonId},wife_id.eq.${currentEditingPersonId}`)
-        .order('marriage_order');
+      const { data: marr } = await sb.from('marriages').select('*').or(`husband_id.eq.${currentEditingPersonId},wife_id.eq.${currentEditingPersonId}`).order('marriage_order');
       const spouseRows = $('spouseRows');
       if (spouseRows) spouseRows.innerHTML = '';
       (marr || []).forEach(m => {
@@ -293,14 +250,11 @@
         addSpouseRowWithId(spId);
       });
 
-      // Children
       await loadChildrenList();
     } catch (e) { console.error(LOG, 'loadPersonEditFields', e); }
   }
 
-  // ============================================================
-  // FOOTER (động theo mode)
-  // ============================================================
+  // ============ FOOTER ============
   function renderFooter(mode) {
     const footer = $('personFormFooter');
     if (!footer) return;
@@ -323,19 +277,13 @@
     }
   }
 
-  // ============================================================
-  // AVATAR + CROP
-  // ============================================================
+  // ============ AVATAR + CROP ============
   function renderAvatarPreview() {
     const preview = $('avatarPreview');
     if (!preview) return;
-    if (tempAvatarData) {
-      preview.innerHTML = `<img src="${tempAvatarData}" alt="preview">`;
-    } else if (currentEditingAvatarPath) {
-      preview.innerHTML = `<img src="${escHtml(currentEditingAvatarPath)}" alt="avatar">`;
-    } else {
-      preview.innerHTML = `<span class="avatar-preview__placeholder">📷</span>`;
-    }
+    if (tempAvatarData) preview.innerHTML = `<img src="${tempAvatarData}" alt="preview">`;
+    else if (currentEditingAvatarPath) preview.innerHTML = `<img src="${escHtml(currentEditingAvatarPath)}" alt="avatar">`;
+    else preview.innerHTML = `<span class="avatar-preview__placeholder">📷</span>`;
   }
 
   window.openCropModal = function (event) {
@@ -344,73 +292,46 @@
     if (file.size > 5 * 1024 * 1024) { alert('Ảnh quá lớn, tối đa 5MB'); return; }
     const reader = new FileReader();
     reader.onload = e => {
-      const modal = $('cropModal');
-      const img = $('cropImage');
+      const modal = $('cropModal'); const img = $('cropImage');
       if (!modal || !img) return;
       img.src = e.target.result;
       modal.style.display = 'flex';
-      // Destroy cũ
       if (cropperInstance) { cropperInstance.destroy(); cropperInstance = null; }
-      // Init cropper 3:4
       setTimeout(() => {
-        cropperInstance = new Cropper(img, {
-          aspectRatio: 3 / 4,
-          viewMode: 1,
-          autoCropArea: 0.9,
-          background: false
-        });
+        cropperInstance = new Cropper(img, { aspectRatio: 3 / 4, viewMode: 1, autoCropArea: 0.9, background: false });
       }, 100);
     };
     reader.readAsDataURL(file);
   };
 
   window.closeCropModal = function () {
-    const modal = $('cropModal');
-    if (modal) modal.style.display = 'none';
+    const modal = $('cropModal'); if (modal) modal.style.display = 'none';
     if (cropperInstance) { cropperInstance.destroy(); cropperInstance = null; }
     const input = $('avatarInput'); if (input) input.value = '';
   };
-
-  window.rotateCropImage = function (deg) {
-    if (cropperInstance) cropperInstance.rotate(deg);
-  };
+  window.rotateCropImage = function (deg) { if (cropperInstance) cropperInstance.rotate(deg); };
   window.flipCropImage = function (dir) {
     if (!cropperInstance) return;
     const scaleX = cropperInstance.getData().scaleX || 1;
     const scaleY = cropperInstance.getData().scaleY || 1;
-    if (dir === 'h') cropperInstance.scaleX(-scaleX);
-    else cropperInstance.scaleY(-scaleY);
+    if (dir === 'h') cropperInstance.scaleX(-scaleX); else cropperInstance.scaleY(-scaleY);
   };
-  window.resetCropImage = function () {
-    if (cropperInstance) cropperInstance.reset();
-  };
+  window.resetCropImage = function () { if (cropperInstance) cropperInstance.reset(); };
 
   window.confirmCrop = function () {
     if (!cropperInstance) return;
-    const canvas = cropperInstance.getCroppedCanvas({
-      width: 300, height: 400, imageSmoothingQuality: 'high'
-    });
+    const canvas = cropperInstance.getCroppedCanvas({ width: 300, height: 400, imageSmoothingQuality: 'high' });
     canvas.toBlob(blob => {
       if (!blob) return;
-      // Chuyển sang base64 để hiển thị preview
       const reader = new FileReader();
-      reader.onload = e => {
-        tempAvatarData = e.target.result;
-        renderAvatarPreview();
-        closeCropModal();
-      };
+      reader.onload = e => { tempAvatarData = e.target.result; renderAvatarPreview(); closeCropModal(); };
       reader.readAsDataURL(blob);
-      // Lưu blob để upload sau (khi savePerson)
       window.__tempAvatarBlob = blob;
     }, 'image/webp', 0.9);
   };
 
-  // ============================================================
-  // SPOUSE ROWS
-  // ============================================================
-  window.addSpouseRow = function () {
-    addSpouseRowWithId(null);
-  };
+  // ============ SPOUSE ============
+  window.addSpouseRow = function () { addSpouseRowWithId(null); };
 
   function addSpouseRowWithId(preselectId) {
     const container = $('spouseRows');
@@ -418,8 +339,7 @@
     const rowId = 'spouse-row-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
     const counter = container.children.length + 1;
     const row = document.createElement('div');
-    row.className = 'spouse-row';
-    row.id = rowId;
+    row.className = 'spouse-row'; row.id = rowId;
     row.innerHTML = `
       <span class="spouse-row__label">Vợ/Chồng ${counter}:</span>
       <select class="spouse-select form-input"><option value="">-- Chọn vợ/chồng --</option></select>
@@ -430,10 +350,8 @@
   }
 
   window.removeSpouseRow = function (rowId) {
-    const row = $(rowId);
-    if (row) row.remove();
-    const container = $('spouseRows');
-    if (!container) return;
+    const row = $(rowId); if (row) row.remove();
+    const container = $('spouseRows'); if (!container) return;
     Array.from(container.querySelectorAll('.spouse-row')).forEach((r, idx) => {
       const lbl = r.querySelector('.spouse-row__label');
       if (lbl) lbl.textContent = 'Vợ/Chồng ' + (idx + 1) + ':';
@@ -444,52 +362,34 @@
     if (!select) return;
     try {
       sb = getSupabase();
-      const { data } = await sb.from('persons')
-        .select('id, full_name, generation').eq('is_deleted', false)
-        .order('generation').order('birth_order');
+      const { data } = await sb.from('persons').select('id, full_name, generation').eq('is_deleted', false).order('generation').order('birth_order');
       select.innerHTML = '<option value="">-- Chọn vợ/chồng --</option>';
       (data || []).forEach(p => {
         const o = document.createElement('option');
-        o.value = p.id;
-        o.textContent = p.full_name + ' (Đời ' + p.generation + ')';
+        o.value = p.id; o.textContent = p.full_name + ' (Đời ' + p.generation + ')';
         if (preselectId && p.id === preselectId) o.selected = true;
         select.appendChild(o);
       });
     } catch (e) { console.error(LOG, 'populateSpouseSelect', e); }
   }
 
-  // ============================================================
-  // CHILDREN
-  // ============================================================
+  // ============ CHILDREN ============
   async function loadChildrenList() {
-    const container = $('childrenList');
-    if (!container) return;
+    const container = $('childrenList'); if (!container) return;
     try {
-      const { data: links } = await sb.from('parent_child')
-        .select('*').eq('parent_id', currentEditingPersonId);
-      if (!links || !links.length) {
-        container.innerHTML = '<p class="empty-hint">Chưa có con nào.</p>';
-        return;
-      }
+      const { data: links } = await sb.from('parent_child').select('*').eq('parent_id', currentEditingPersonId);
+      if (!links || !links.length) { container.innerHTML = '<p class="empty-hint">Chưa có con nào.</p>'; return; }
       const kidIds = links.map(l => l.child_id);
-      const { data: kids } = await sb.from('persons')
-        .select('id, full_name, birth_year, gender').in('id', kidIds);
-      container.innerHTML = (kids || []).map(k => `
-        <div class="child-item" data-id="${escHtml(k.id)}">
-          <span>${escHtml(k.full_name)} ${k.birth_year ? '(' + k.birth_year + ')' : ''}</span>
-        </div>
-      `).join('');
+      const { data: kids } = await sb.from('persons').select('id, full_name, birth_year, gender').in('id', kidIds);
+      container.innerHTML = (kids || []).map(k => `<div class="child-item" data-id="${escHtml(k.id)}"><span>${escHtml(k.full_name)} ${k.birth_year ? '(' + k.birth_year + ')' : ''}</span></div>`).join('');
     } catch (e) { console.error(LOG, 'loadChildrenList', e); }
   }
 
   window.openAddChildModal = function () {
     const m = $('addChildModal'); if (m) m.style.display = 'flex';
-    const fields = ['childName', 'childBirthYear', 'childOrder'];
-    fields.forEach(id => { const el = $(id); if (el) el.value = ''; });
+    ['childName', 'childBirthYear', 'childOrder'].forEach(id => { const el = $(id); if (el) el.value = ''; });
   };
-  window.closeAddChildModal = function () {
-    const m = $('addChildModal'); if (m) m.style.display = 'none';
-  };
+  window.closeAddChildModal = function () { const m = $('addChildModal'); if (m) m.style.display = 'none'; };
 
   window.confirmAddChild = async function () {
     const childName = $('childName')?.value.trim();
@@ -497,28 +397,19 @@
     try {
       sb = getSupabase();
       const childPayload = {
-        full_name: childName,
-        gender: $('childGender')?.value || 'Nam',
+        full_name: childName, gender: $('childGender')?.value || 'Nam',
         birth_year: parseInt($('childBirthYear')?.value || '0') || null,
         generation: (parseInt($('generation')?.value || '1') || 1) + 1,
-        role_type: 'Huyết thống',
-        special_status: 'Bình thường',
-        is_deleted: false
+        role_type: 'Huyết thống', special_status: 'Bình thường', is_deleted: false
       };
-      const { data: child, error } = await sb.from('persons')
-        .insert([childPayload]).select().single();
+      const { data: child, error } = await sb.from('persons').insert([childPayload]).select().single();
       if (error) throw error;
-
-      // Thêm parent_child với parent_role dựa giới tính người hiện tại
       const parentGender = tempOriginalPerson?.gender || $('gender')?.value;
       const parentRole = parentGender === 'Nữ' ? 'Mẹ' : 'Bố';
       const { error: e2 } = await sb.from('parent_child').insert([{
-        parent_id: currentEditingPersonId,
-        child_id: child.id,
-        parent_role: parentRole,
-        relation: $('childType')?.value || 'Con chung',
-        child_type: $('childType')?.value || 'Con chung',
-        is_family_member: true
+        parent_id: currentEditingPersonId, child_id: child.id,
+        parent_role: parentRole, relation: $('childType')?.value || 'Con chung',
+        child_type: $('childType')?.value || 'Con chung', is_family_member: true
       }]);
       if (e2) throw e2;
       closeAddChildModal();
@@ -531,9 +422,7 @@
     const m = $('quickAddModal'); if (m) m.style.display = 'flex';
     const txt = $('quickAddText'); if (txt) txt.value = '';
   };
-  window.closeQuickAddModal = function () {
-    const m = $('quickAddModal'); if (m) m.style.display = 'none';
-  };
+  window.closeQuickAddModal = function () { const m = $('quickAddModal'); if (m) m.style.display = 'none'; };
 
   window.confirmQuickAdd = async function () {
     const raw = $('quickAddText')?.value || '';
@@ -548,9 +437,10 @@
       for (let i = 0; i < lines.length; i++) {
         const name = lines[i];
         const gender = /Thị|Nữ/i.test(name) ? 'Nữ' : 'Nam';
-        const { data: c, error } = await sb.from('persons')
-          .insert([{ full_name: name, gender, generation: gen, role_type: 'Huyết thống', special_status: 'Bình thường', birth_order: i + 1, is_deleted: false }])
-          .select().single();
+        const { data: c, error } = await sb.from('persons').insert([{
+          full_name: name, gender, generation: gen, role_type: 'Huyết thống',
+          special_status: 'Bình thường', birth_order: i + 1, is_deleted: false
+        }]).select().single();
         if (error) { console.warn(LOG, 'quickAdd fail', name, error); continue; }
         await sb.from('parent_child').insert([{
           parent_id: currentEditingPersonId, child_id: c.id,
@@ -565,16 +455,12 @@
     } catch (e) { console.error(LOG, 'confirmQuickAdd', e); alert('Lỗi: ' + e.message); }
   };
 
-  // ============================================================
-  // CONTACT / LINKED NOTES / CHAR COUNTER
-  // ============================================================
+  // ============ CONTACT / NOTES / CHAR ============
   window.addContactRow = function () {
-    const list = $('contactList');
-    if (!list) return;
+    const list = $('contactList'); if (!list) return;
     const rowId = 'contact-' + Date.now();
     const row = document.createElement('div');
-    row.className = 'contact-row';
-    row.id = rowId;
+    row.className = 'contact-row'; row.id = rowId;
     row.innerHTML = `
       <input type="text" class="form-input" placeholder="Nhãn (VD: Zalo)" style="width:40%">
       <input type="text" class="form-input" placeholder="Giá trị" style="width:50%">
@@ -584,14 +470,12 @@
   };
 
   function renderContactRows() {
-    const list = $('contactList');
-    if (!list) return;
+    const list = $('contactList'); if (!list) return;
     list.innerHTML = '';
     Object.entries(tempContactInfo || {}).forEach(([k, v]) => {
       const rowId = 'contact-' + Date.now() + Math.random();
       const row = document.createElement('div');
-      row.className = 'contact-row';
-      row.id = rowId;
+      row.className = 'contact-row'; row.id = rowId;
       row.innerHTML = `
         <input type="text" class="form-input" value="${escHtml(k)}" style="width:40%">
         <input type="text" class="form-input" value="${escHtml(v)}" style="width:50%">
@@ -602,8 +486,7 @@
   }
 
   window.updateCharCount = function (id, max) {
-    const el = $(id);
-    const counter = $(id + '-counter');
+    const el = $(id); const counter = $(id + '-counter');
     if (!el || !counter) return;
     const len = el.value.length;
     counter.textContent = len + '/' + max + ' ký tự';
@@ -613,28 +496,16 @@
 
   window.openLinkNoteModal = function () {
     const m = $('linkNoteModal'); if (m) m.style.display = 'flex';
-    // Load notes
     loadAvailableNotes();
   };
-  window.closeLinkNoteModal = function () {
-    const m = $('linkNoteModal'); if (m) m.style.display = 'none';
-  };
+  window.closeLinkNoteModal = function () { const m = $('linkNoteModal'); if (m) m.style.display = 'none'; };
 
   async function loadAvailableNotes() {
-    const list = $('availableNotesList');
-    if (!list) return;
+    const list = $('availableNotesList'); if (!list) return;
     try {
       const { data } = await sb.from('notes').select('id, title').limit(50);
-      if (!data || !data.length) {
-        list.innerHTML = '<p class="empty-hint">Chưa có bài viết nào.</p>';
-        return;
-      }
-      list.innerHTML = data.map(n => `
-        <label class="note-pick-item">
-          <input type="checkbox" value="${escHtml(n.id)}" ${tempLinkedNoteIds.includes(n.id) ? 'checked' : ''}>
-          ${escHtml(n.title)}
-        </label>
-      `).join('');
+      if (!data || !data.length) { list.innerHTML = '<p class="empty-hint">Chưa có bài viết nào.</p>'; return; }
+      list.innerHTML = data.map(n => `<label class="note-pick-item"><input type="checkbox" value="${escHtml(n.id)}" ${tempLinkedNoteIds.includes(n.id) ? 'checked' : ''}>${escHtml(n.title)}</label>`).join('');
     } catch (e) { console.error(LOG, 'loadAvailableNotes', e); }
   }
 
@@ -646,20 +517,12 @@
   };
 
   function renderLinkedNotes() {
-    const list = $('linkedNotesList');
-    if (!list) return;
-    if (!tempLinkedNoteIds.length) {
-      list.innerHTML = '<p class="empty-hint">Chưa có bài viết liên kết.</p>';
-      return;
-    }
-    list.innerHTML = tempLinkedNoteIds.map(id =>
-      `<div class="linked-note" data-id="${escHtml(id)}">📄 ${escHtml(id.slice(0, 8))}...</div>`
-    ).join('');
+    const list = $('linkedNotesList'); if (!list) return;
+    if (!tempLinkedNoteIds.length) { list.innerHTML = '<p class="empty-hint">Chưa có bài viết liên kết.</p>'; return; }
+    list.innerHTML = tempLinkedNoteIds.map(id => `<div class="linked-note" data-id="${escHtml(id)}">📄 ${escHtml(id.slice(0, 8))}...</div>`).join('');
   }
 
-  // ============================================================
-  // AUTOCOMPLETE BỐ / MẸ
-  // ============================================================
+  // ============ AUTOCOMPLETE BỐ / MẸ ============
   function initParentAutocomplete() {
     loadAllPersonsCache().then(() => {
       setupAutocomplete('fatherSearch', 'fatherId', 'fatherDropdown', 'Bố');
@@ -670,24 +533,15 @@
   async function loadAllPersonsCache() {
     try {
       sb = getSupabase();
-      const { data } = await sb.from('persons')
-        .select('id, full_name, generation, gender')
-        .eq('is_deleted', false)
-        .order('generation').order('birth_order');
+      const { data } = await sb.from('persons').select('id, full_name, generation, gender').eq('is_deleted', false).order('generation').order('birth_order');
       allPersonsCache = data || [];
       console.log(LOG, 'Cache loaded:', allPersonsCache.length, 'persons');
     } catch (e) { console.error(LOG, 'loadAllPersonsCache', e); }
   }
 
   function setupAutocomplete(inputId, hiddenId, dropdownId, role) {
-    const input = $(inputId);
-    const hidden = $(hiddenId);
-    const dropdown = $(dropdownId);
-    if (!input || !hidden || !dropdown) {
-      console.warn(LOG, 'Thiếu element:', inputId, hiddenId, dropdownId);
-      return;
-    }
-    // Chống bind trùng
+    const input = $(inputId); const hidden = $(hiddenId); const dropdown = $(dropdownId);
+    if (!input || !hidden || !dropdown) { console.warn(LOG, 'Thiếu element:', inputId); return; }
     if (input.dataset.acBound === '1') return;
     input.dataset.acBound = '1';
 
@@ -695,38 +549,23 @@
       hidden.value = '';
       const q = normalize(input.value.trim());
       if (q.length < 1) { dropdown.style.display = 'none'; return; }
-      const matches = allPersonsCache
-        .filter(p => normalize(p.full_name).includes(q))
-        .slice(0, 8);
+      const matches = allPersonsCache.filter(p => normalize(p.full_name).includes(q)).slice(0, 8);
       renderDropdown(dropdown, matches, input, hidden, role);
     });
-
     input.addEventListener('focus', function () {
       const q = normalize(input.value.trim());
       if (q.length >= 1) {
-        const matches = allPersonsCache
-          .filter(p => normalize(p.full_name).includes(q))
-          .slice(0, 8);
+        const matches = allPersonsCache.filter(p => normalize(p.full_name).includes(q)).slice(0, 8);
         renderDropdown(dropdown, matches, input, hidden, role);
       }
     });
-
-    input.addEventListener('blur', function () {
-      setTimeout(() => { dropdown.style.display = 'none'; }, 250);
-    });
+    input.addEventListener('blur', function () { setTimeout(() => { dropdown.style.display = 'none'; }, 250); });
   }
 
   function renderDropdown(dropdown, matches, input, hidden, role) {
     const q = input.value.trim();
-    let html = matches.map(p => `
-      <div class="ac-item" data-id="${escHtml(p.id)}" data-name="${escHtml(p.full_name)}" data-gen="${p.generation}">
-        <b>${escHtml(p.full_name)}</b>
-        <span class="ac-gen">Đời ${p.generation || '?'} • ${escHtml(p.gender || '')}</span>
-      </div>
-    `).join('');
-    if (q) {
-      html += `<div class="ac-item ac-item--create" data-create="1">+ Tạo mới "${escHtml(q)}"</div>`;
-    }
+    let html = matches.map(p => `<div class="ac-item" data-id="${escHtml(p.id)}" data-name="${escHtml(p.full_name)}" data-gen="${p.generation}"><b>${escHtml(p.full_name)}</b><span class="ac-gen">Đời ${p.generation || '?'} • ${escHtml(p.gender || '')}</span></div>`).join('');
+    if (q) html += `<div class="ac-item ac-item--create" data-create="1">+ Tạo mới "${escHtml(q)}"</div>`;
     if (!html) html = '<div class="ac-item ac-empty">Không tìm thấy</div>';
     dropdown.innerHTML = html;
     dropdown.style.display = 'block';
@@ -742,10 +581,7 @@
             if (newId) {
               input.value = newName + ' (Đời ' + gen + ')';
               hidden.value = newId;
-              allPersonsCache.push({
-                id: newId, full_name: newName, generation: gen,
-                gender: role === 'Bố' ? 'Nam' : 'Nữ'
-              });
+              allPersonsCache.push({ id: newId, full_name: newName, generation: gen, gender: role === 'Bố' ? 'Nam' : 'Nữ' });
               dropdown.style.display = 'none';
             }
           });
@@ -763,27 +599,17 @@
       sb = getSupabase();
       const gen = generation > 0 ? generation : 1;
       const payload = {
-        full_name: fullName,
-        gender: role === 'Bố' ? 'Nam' : 'Nữ',
-        generation: gen,
-        role_type: 'Huyết thống',
-        special_status: 'Bình thường',
-        is_deleted: false
+        full_name: fullName, gender: role === 'Bố' ? 'Nam' : 'Nữ', generation: gen,
+        role_type: 'Huyết thống', special_status: 'Bình thường', is_deleted: false
       };
       const { data, error } = await sb.from('persons').insert([payload]).select().single();
       if (error) throw error;
       console.log(LOG, 'Tạo mới:', data);
       return data.id;
-    } catch (e) {
-      console.error(LOG, 'createPersonQuick', e);
-      alert('Không tạo được người mới: ' + e.message);
-      return null;
-    }
+    } catch (e) { console.error(LOG, 'createPersonQuick', e); alert('Không tạo được: ' + e.message); return null; }
   }
 
-  // ============================================================
-  // SAVE PERSON
-  // ============================================================
+  // ============ SAVE PERSON ============
   window.savePerson = async function () {
     console.log(LOG, 'savePerson');
     try {
@@ -806,12 +632,10 @@
       };
       if (!payload.full_name) { alert('Vui lòng nhập họ tên'); return; }
 
-      // Upload avatar nếu có blob mới
       if (window.__tempAvatarBlob) {
         try {
           const fname = 'avatar-' + Date.now() + '.webp';
-          const { data: up, error: upErr } = await sb.storage.from('avatars')
-            .upload(fname, window.__tempAvatarBlob, { contentType: 'image/webp', upsert: true });
+          const { data: up, error: upErr } = await sb.storage.from('avatars').upload(fname, window.__tempAvatarBlob, { contentType: 'image/webp', upsert: true });
           if (!upErr && up) {
             const { data: pub } = sb.storage.from('avatars').getPublicUrl(fname);
             payload.avatar_url = pub.publicUrl;
@@ -839,10 +663,7 @@
       closePersonForm();
       if (typeof window.refreshAll === 'function') window.refreshAll();
       else location.reload();
-    } catch (e) {
-      console.error(LOG, 'savePerson', e);
-      alert('Lỗi lưu: ' + e.message);
-    }
+    } catch (e) { console.error(LOG, 'savePerson', e); alert('Lỗi lưu: ' + e.message); }
   };
 
   async function saveParentLinks(personId) {
@@ -850,44 +671,30 @@
     const motherId = $('motherId')?.value;
     await sb.from('parent_child').delete().eq('child_id', personId);
     const inserts = [];
-    if (fatherId) inserts.push({
-      parent_id: fatherId, child_id: personId,
-      parent_role: 'Bố', relation: 'Con chung',
-      child_type: 'Con chung', is_family_member: true
-    });
-    if (motherId) inserts.push({
-      parent_id: motherId, child_id: personId,
-      parent_role: 'Mẹ', relation: 'Con chung',
-      child_type: 'Con chung', is_family_member: true
-    });
-    if (inserts.length) {
-      const { error } = await sb.from('parent_child').insert(inserts);
-      if (error) throw error;
-    }
+    if (fatherId) inserts.push({ parent_id: fatherId, child_id: personId, parent_role: 'Bố', relation: 'Con chung', child_type: 'Con chung', is_family_member: true });
+    if (motherId) inserts.push({ parent_id: motherId, child_id: personId, parent_role: 'Mẹ', relation: 'Con chung', child_type: 'Con chung', is_family_member: true });
+    if (inserts.length) { const { error } = await sb.from('parent_child').insert(inserts); if (error) throw error; }
   }
 
   async function saveSpouseLinks(personId) {
     const selects = document.querySelectorAll('#spouseRows .spouse-select');
     const spouseIds = Array.from(selects).map(s => s.value).filter(Boolean);
     const gender = tempOriginalPerson?.gender || $('gender')?.value;
-    await sb.from('marriages').delete()
-      .or(`husband_id.eq.${personId},wife_id.eq.${personId}`);
+    await sb.from('marriages').delete().or(`husband_id.eq.${personId},wife_id.eq.${personId}`);
     let order = 1;
     for (const spId of spouseIds) {
       const isHusband = gender === 'Nam';
       await sb.from('marriages').insert([{
         husband_id: isHusband ? personId : spId,
         wife_id: isHusband ? spId : personId,
-        marriage_order: order++,
-        status: 'Chính thất'
+        marriage_order: order++, status: 'Chính thất'
       }]);
     }
   }
 
   async function saveLinkedNotes(personId) {
-    try {
-      await sb.from('persons').update({ linked_note_ids: tempLinkedNoteIds }).eq('id', personId);
-    } catch (e) { console.warn(LOG, 'saveLinkedNotes', e); }
+    try { await sb.from('persons').update({ linked_note_ids: tempLinkedNoteIds }).eq('id', personId); }
+    catch (e) { console.warn(LOG, 'saveLinkedNotes', e); }
   }
 
   async function saveContactInfo(personId) {
@@ -904,8 +711,11 @@
     } catch (e) { console.warn(LOG, 'saveContactInfo', e); }
   }
 
-  // ---------- EXPOSE ----------
+  // ============ EXPOSE ============
   window.resetForm = resetForm;
   window.showViewMode = showViewMode;
   window.showEditMode = showEditMode;
+
+  // ⭐ LOG XÁC NHẬN CUỐI
+  console.log('[Form] ✓ Exports:', typeof window.openPersonForm, typeof window.savePerson, typeof window.closePersonForm);
 })();
