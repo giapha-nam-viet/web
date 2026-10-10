@@ -667,8 +667,8 @@ function setupAddPerson() {
       document.getElementById('loginModal').style.display = 'flex';
       return;
     }
-    if (typeof openPersonForm === 'function') {
-      openPersonForm();
+if (typeof window.openPersonForm === 'function') {
+window.openPersonForm();
     } else {
       alert('⚠️ Form chưa được tải. Vui lòng thử lại sau.');
     }
