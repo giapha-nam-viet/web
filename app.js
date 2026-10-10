@@ -1,12 +1,11 @@
 /* ============================================
-   GIA PHẢ NAM VIỆT - APP.JS (v3.4.4)
-   - v3.0: Đăng nhập bằng mật khẩu
-   - v3.3: Phase A — viết hoa + đậm gạch chân
-   - v3.4: Tự động nhận diện huyết thống vs phối ngẫu
+   GIA PHẢ NAM VIỆT - APP.JS (v3.4.5)
+   - v3.4.5: sửa gọi openPersonForm qua window (fix undefined)
    - v3.4.4: role_type = Dâu/Rể → LUÔN ở cột phải
-     (kể cả khi chưa có marriage) — có badge cảnh báo
+   - v3.4: Tự động nhận diện huyết thống vs phối ngẫu
+   - v3.3: Phase A — viết hoa + đậm gạch chân
+   - v3.0: Đăng nhập bằng mật khẩu
    - Phase B1: expose sbClient ra window.appSupabase
-     để pedigree.js dùng chung
    ============================================ */
 
 const SUPABASE_URL = 'https://bqojzghxgdkrfyhnvpku.supabase.co';
@@ -17,7 +16,7 @@ try {
   if (window.supabase && window.supabase.createClient) {
     sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     window.sbClient = sbClient;
-    window.appSupabase = sbClient;   // 👈 THÊM MỚI: expose cho pedigree.js
+    window.appSupabase = sbClient;
     console.log('✅ Đã kết nối Supabase');
   }
 } catch (err) {
@@ -419,12 +418,7 @@ function getGenerationLabel(gen) {
 }
 
 /* ============================================
-   v3.4.4 — XÁC ĐỊNH HUYẾT THỐNG HAY PHỐI NGẪU
-   
-   QUY TẮC MỚI (đơn giản, rõ ràng):
-   1. role_type chứa 'Dâu/Rể/Vợ/Chồng/Phối ngẫu' → PHỐI NGẪU (cột phải) — LUÔN LUÔN
-   2. role = 'Huyết thống' → HUYẾT THỐNG (cột trái)
-   3. Các trường hợp khác → mặc định HUYẾT THỐNG
+   XÁC ĐỊNH HUYẾT THỐNG HAY PHỐI NGẪU
    ============================================ */
 function isHuyetThong(person) {
   if (!person) return true;
@@ -432,26 +426,16 @@ function isHuyetThong(person) {
   const roleType = (person.role_type || '').trim().toLowerCase();
   const role = (person.role || '').trim();
 
-  // 1. role_type có từ khoá phối ngẫu → LUÔN phối ngẫu
   const phoiNgauKeywords = ['dâu', 'rể', 'vợ', 'chồng', 'phối ngẫu'];
   if (phoiNgauKeywords.some(kw => roleType.includes(kw))) {
     return false;
   }
 
-  // 2. role = 'Huyết thống' → huyết thống
   if (role === 'Huyết thống') return true;
-
-  // 3. role có giá trị khác → phối ngẫu
   if (role && role !== 'Huyết thống') return false;
-
-  // 4. Mặc định huyết thống
   return true;
 }
 
-/* ============================================
-   v3.4.4 — KIỂM TRA PHỐI NGẪU CHƯA LIÊN KẾT
-   (Dâu/Rể nhưng chưa có marriage)
-   ============================================ */
 function isUnlinkedSpouse(person) {
   if (!person) return false;
   if (isHuyetThong(person)) return false;
@@ -486,7 +470,6 @@ function renderPersons() {
     const people = byGeneration[gen];
     const huyetThong = people.filter(p => isHuyetThong(p));
 
-    // SORT ỔN ĐỊNH
     huyetThong.sort((a, b) => {
       const aOrder = a.sibling_order != null ? a.sibling_order : 9999;
       const bOrder = b.sibling_order != null ? b.sibling_order : 9999;
@@ -551,8 +534,6 @@ function renderPersons() {
       });
     }
 
-    // v3.4.4 — PHỐI NGẪU CHƯA LIÊN KẾT
-    // Hiện các Dâu/Rể không có marriage ở cột phải (không có cặp)
     const orphanSpouses = people.filter(p => isUnlinkedSpouse(p));
     orphanSpouses.sort((a, b) => {
       const aCreated = a.created_at || '';
@@ -565,11 +546,9 @@ function renderPersons() {
       const coupleRow = document.createElement('div');
       coupleRow.className = 'couple-row';
 
-      // Cột trái trống
       const leftCol = document.createElement('div');
       leftCol.innerHTML = '<div class="person-mini" style="opacity:0;pointer-events:none;min-height:0;padding:0;border:none;"></div>';
 
-      // Cột phải có người
       const rightCol = document.createElement('div');
       rightCol.appendChild(createPersonMini(p));
 
@@ -587,7 +566,14 @@ function createPersonMini(person) {
   card.className = 'person-mini';
   card.dataset.id = person.id;
   card.style.cursor = 'pointer';
-  card.onclick = () => openPersonForm(person.id);
+  // ⭐ v3.4.5 — gọi qua window.openPersonForm để tránh undefined
+  card.onclick = () => {
+    if (typeof window.openPersonForm === 'function') {
+      window.openPersonForm(person.id);
+    } else {
+      console.warn('[app] openPersonForm chưa sẵn sàng');
+    }
+  };
 
   let nameClass = 'person-mini__name';
   if (person.is_unknown) nameClass += ' person-mini__name--unknown';
@@ -602,7 +588,6 @@ function createPersonMini(person) {
 
   const genStr = person.generation ? getGenerationLabel(person.generation) : '';
 
-  // Badge cho phối ngẫu chưa liên kết
   const badgeHtml = isUnlinkedSpouse(person)
     ? '<span style="display:inline-block;background:#FFF3CD;color:#856404;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;margin-top:4px;">⚠️ Chưa liên kết vợ/chồng</span>'
     : '';
@@ -656,7 +641,7 @@ function removeVietnameseTones(str) {
 }
 
 /* ============================================
-   NÚT THÊM NGƯỜI
+   NÚT THÊM NGƯỜI — v3.4.5 (gọi qua window)
    ============================================ */
 function setupAddPerson() {
   const btn = document.getElementById('addPersonBtn');
@@ -667,10 +652,10 @@ function setupAddPerson() {
       document.getElementById('loginModal').style.display = 'flex';
       return;
     }
-if (typeof window.openPersonForm === 'function') {
-window.openPersonForm();
+    if (typeof window.openPersonForm === 'function') {
+      window.openPersonForm();
     } else {
-      alert('⚠️ Form chưa được tải. Vui lòng thử lại sau.');
+      alert('⚠️ Form chưa được tải. Vui lòng thử lại sau 1-2 giây.');
     }
   });
 }
@@ -856,7 +841,7 @@ function formatText(text) {
   return String(content).split('\n').map(line => '<p>' + line + '</p>').join('');
 }
 
-console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v3.4.4)', 'font-size: 20px; color: #01285E; font-weight: bold;');
+console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v3.4.5)', 'font-size: 20px; color: #01285E; font-weight: bold;');
 
 /* ============================================
    BỘ ĐẾM KÝ TỰ
