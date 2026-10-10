@@ -1,21 +1,21 @@
 /* ============================================================
-   pedigree.js v5.2 — Layout DỌC đơn giản hoá
-   - Cột = birth_order (Đời 2: 7 cột, Đời 3: 10 cột)
-   - Không còn phụ thuộc branch cho layout
-   - Sort con theo birth_order (fallback sibling_order)
-   - Huyết thống: viền đậm #88a9ad | Phối ngẫu: viền nhạt #b4c8ca
-   - special_status 'Mất sớm'/'Không rõ' → mờ + chú thích
-   - Auto-focus Phạm Văn Mỹ
+   pedigree.js v6.0 — Layout kiểu A (con nằm dưới cha)
+   - Sửa lỗi cấu trúc v5.2/v5.3 hỏng (compute is not defined)
+   - Đệ quy post-order: mỗi cây con có không gian riêng
+   - Cha đặt ở tâm các con
+   - Cháu nằm dưới con (đệ quy tự nhiên)
+   - Vợ/chồng vẫn xếp dọc dưới cha
+   - Giữ nguyên: load, buildTree, render, toolbar, autofocus
    ============================================================ */
 (function () {
   'use strict';
   const LOG = '[Pedigree]';
-  console.log(LOG, 'v5.2 loaded');
+  console.log(LOG, 'v6.0 loaded');
 
   // ---------- CONFIG ----------
   const CFG = {
     node:      { w: 180, h: 56 },
-    gapX:      30,           // khoảng cách cột (Đời 3 có 10 con → thu hẹp)
+    gapX:      30,
     gapY:      90,
     padding:   60,
     spouseGap: 8,
@@ -101,12 +101,14 @@
     const parentsOf = new Map();
     const childToFather = new Map();
     const childToMother = new Map();
+
     pcLinks.forEach(l => {
       const pid = String(l.parent_id), cid = String(l.child_id);
       if (!byId.has(pid) || !byId.has(cid)) return;
       if (l.parent_role === 'Bố') childToFather.set(cid, pid);
       else if (l.parent_role === 'Mẹ') childToMother.set(cid, pid);
     });
+
     const allChildren = new Set([...childToFather.keys(), ...childToMother.keys()]);
     allChildren.forEach(cid => {
       const pid = childToFather.get(cid) || childToMother.get(cid);
@@ -137,156 +139,94 @@
     if (!rootsAll.length) return null;
     const minGen = rootsAll[0].generation || 1;
     const rootPersons = rootsAll.filter(p => (p.generation || 0) === minGen && isBlood(p));
-  // ---------- 3) COMPUTE LAYOUT (v5.3 — con nằm dưới cha) ----------
+    if (!rootPersons.length) rootPersons.push(rootsAll[0]);
+
+    // Chi (chỉ để filter dropdown)
+    const branchSet = new Set();
+    persons.forEach(p => { if (p.branch && p.branch.trim()) branchSet.add(p.branch.trim()); });
+    const branches = Array.from(branchSet).sort();
+
+    console.log(LOG, `tree: ${rootPersons.length} roots, ${branches.length} branches`);
+    return { byId, childrenOf, parentsOf, spousesOf, roots: rootPersons, branches, minGen };
+  }
+
+  // ---------- 3) COMPUTE LAYOUT (kiểu A: con nằm dưới cha) ----------
   function computeLayout(tree) {
-    console.log(LOG, 'computeLayout v5.3...');
-    const { byId, childrenOf, spousesOf, roots, minGen } = tree;
+    console.log(LOG, 'computeLayout v6.0...');
+    const { byId, childrenOf, spousesOf, roots } = tree;
     const NW = CFG.node.w, NH = CFG.node.h;
-    const stepX = NW + CFG.gapX;
-    const stepY = NH + CFG.gapY;
     const spouseGap = CFG.spouseGap;
 
     const nodes = [];
     const links = [];
-    const placed = new Set();
 
-    // Xây "cây con" đệ quy: mỗi người + vợ/chồng + con
-    // Trả về { width, height, cx } — chiều rộng cây con, chiều cao, tâm X của cha
+    // Bước 1: Xây cây con (đệ quy) — mỗi subtree có width/height riêng
+    const treeCache = new Map();
+
     function buildSubtree(person, depth) {
-      if (!person || placed.has(String(person.id))) {
-        return { width: 0, height: 0, cx: 0, topY: 0 };
-      }
-      const pid = String(person.id);
-      placed.add(pid);
-
-      // 1. Vợ/chồng (xếp dọc dưới cha)
-      const spouses = (spousesOf.get(pid) || [])
-        .sort((a, b) => (a.order || 0) - (b.order || 0))
-        .map(s => byId.get(s.spouseId))
-        .filter(Boolean)
-        .filter(sp => !placed.has(String(sp.id)));
-
-      // Đánh dấu vợ/chồng đã đặt
-      spouses.forEach(sp => placed.add(String(sp.id)));
-
-      // Khối hôn nhân cao = cha + n vợ
-      const blockH = NH + spouses.length * (NH + spouseGap);
-
-      // 2. Con (đệ quy trước để biết chiều rộng)
-      const childIds = (childrenOf.get(pid) || [])
-        .map(cid => byId.get(cid))
-        .filter(Boolean)
-        .filter(c => !placed.has(String(c.id)))
-        .sort((a, b) => sortKey(a) - sortKey(b));
-
-      const childSubtrees = [];
-      for (const child of childIds) {
-        const sub = buildSubtree(child, depth + 1);
-        if (sub.width > 0) childSubtrees.push({ child, sub });
-      }
-
-      // 3. Tính chiều rộng cây con
-      // Nếu có con: rộng = tổng chiều rộng các con (mỗi con ít nhất 1 stepX)
-      // Nếu không con: rộng = NW
-      let totalChildWidth = 0;
-      childSubtrees.forEach(({ sub }) => { totalChildWidth += sub.width + CFG.gapX; });
-      const ownWidth = Math.max(NW, totalChildWidth - CFG.gapX); // trừ gapX cuối
-
-      // 4. Tính vị trí tương đối (local x, tính từ mép trái cây con)
-      // Cha ở giữa
-      const localCX = ownWidth / 2;
-
-      // 5. Đặt node cha + vợ
-      const fatherX = localCX - NW / 2;
-      const fatherY = 0;
-
-      // 6. Đặt node con (dưới cha)
-      const childY = blockH + CFG.gapY;
-      let childCursorX = 0;
-      const childPositions = [];
-      childSubtrees.forEach(({ child, sub }) => {
-        const childLocalX = childCursorX + sub.width / 2;
-        childPositions.push({ child, sub, localX: childLocalX });
-        childCursorX += sub.width + CFG.gapX;
-      });
-
-      // Trả về kết quả để cha gọi đệ quy
-      return {
-        width: ownWidth,
-        height: blockH + (childSubtrees.length ? CFG.gapY + Math.max(...childSubtrees.map(s => s.sub.height)) : 0),
-        localCX,
-        fatherX,
-        fatherY,
-        blockH,
-        spouses,
-        childPositions,
-        childY
-      };
-    }
-
-    // Hàm đặt node thật vào mảng (có offset X)
-    function placeSubtree(person, offsetX, offsetY) {
-      const pid = String(person.id);
-      if (placed.has('final_' + pid)) return;
-      // Rebuild lại subtree info (không đệ quy tính lại — dùng cache)
-      // Thay vào đó, chúng ta build 1 lần và cache
-    }
-
-    // CÁCH ĐƠN GIẢN HƠN: build toàn bộ cây 1 lần, ghi lại vị trí local
-    // Rồi duyệt lại để ghi vào nodes[] với offset tuyệt đối
-
-    // Bước 1: build cây con (chỉ tính toán, không ghi nodes)
-    const treeCache = new Map(); // pid → subtree info
-    function buildTree(person, depth) {
-      if (!person) return null;
+      if (!person || depth > 50) return null;
       const pid = String(person.id);
       if (treeCache.has(pid)) return treeCache.get(pid);
-      if (depth > 50) return null; // chống đệ quy vô hạn
 
+      // Vợ/chồng (đã loại người đã dùng ở nhánh khác — dùng placed set toàn cục)
       const spouses = (spousesOf.get(pid) || [])
         .sort((a, b) => (a.order || 0) - (b.order || 0))
         .map(s => byId.get(s.spouseId))
         .filter(Boolean);
 
+      // Khối hôn nhân: cha + n vợ
       const blockH = NH + spouses.length * (NH + spouseGap);
 
+      // Con (đệ quy)
       const childIds = (childrenOf.get(pid) || [])
         .map(cid => byId.get(cid))
         .filter(Boolean)
         .sort((a, b) => sortKey(a) - sortKey(b));
 
-      const children = [];
+      const childSubtrees = [];
       for (const c of childIds) {
-        const sub = buildTree(c, depth + 1);
-        if (sub) children.push(sub);
+        const sub = buildSubtree(c, depth + 1);
+        if (sub) childSubtrees.push(sub);
       }
 
+      // Tính width cây con
       let totalChildWidth = 0;
-      children.forEach(sub => { totalChildWidth += sub.width + CFG.gapX; });
+      childSubtrees.forEach(sub => { totalChildWidth += sub.width + CFG.gapX; });
       const ownWidth = Math.max(NW, totalChildWidth - CFG.gapX);
 
-      // Đặt các con
+      // Tính offset cho từng con (so với tâm cha)
       let cursorX = 0;
-      children.forEach(sub => {
-        sub.offsetX = cursorX + (sub.width) / 2 - ownWidth / 2; // so với tâm cha
+      childSubtrees.forEach(sub => {
+        sub.offsetX = cursorX + sub.width / 2 - ownWidth / 2;
         cursorX += sub.width + CFG.gapX;
       });
 
+      const height = blockH + (childSubtrees.length
+        ? CFG.gapY + Math.max(...childSubtrees.map(s => s.height))
+        : 0);
+
       const info = {
-        person, spouses,
-        width: ownWidth, blockH,
-        children, childY: blockH + CFG.gapY,
-        height: blockH + (children.length ? CFG.gapY + Math.max(...children.map(s => s.height)) : 0)
+        person, pid,
+        spouses,
+        width: ownWidth,
+        blockH,
+        height,
+        children: childSubtrees,
+        childY: blockH + CFG.gapY
       };
       treeCache.set(pid, info);
       return info;
     }
 
-    // Bước 2: ghi nodes với offset tuyệt đối
-    function emitNodes(subtree, absX, absY, isSpouseOf) {
+    // Bước 2: Ghi nodes + links với offset tuyệt đối
+    const placed = new Set();
+
+    function emit(subtree, absX, absY) {
       if (!subtree) return;
-      const { person, spouses, blockH, children, childY } = subtree;
-      const pid = String(person.id);
+      const { person, pid, spouses, blockH, children, childY } = subtree;
+      if (placed.has(pid)) return;
+      placed.add(pid);
+
       const nodeX = absX - NW / 2;
       const nodeY = absY;
 
@@ -296,14 +236,17 @@
         type: isBlood(person) ? 'blood' : 'spouse'
       });
 
-      // Vợ/chồng xếp dọc dưới
+      // Vợ/chồng xếp dọc dưới cha
       let spY = nodeY + NH + spouseGap;
       spouses.forEach(sp => {
         const spId = String(sp.id);
+        if (placed.has(spId)) return;
+        placed.add(spId);
         nodes.push({
           id: spId, person: sp, spouse: person,
           x: nodeX, y: spY, w: NW, h: NH, type: 'spouse'
         });
+        // Link hôn nhân (dọc)
         links.push({
           from: { x: nodeX + NW / 2, y: spY - spouseGap },
           to:   { x: nodeX + NW / 2, y: spY },
@@ -316,56 +259,37 @@
       children.forEach(sub => {
         const childX = absX + sub.offsetX;
         const childYAbs = absY + childY;
-        // Link từ đáy khối hôn nhân → đỉnh con
         links.push({
           from: { x: absX, y: absY + blockH },
           to:   { x: childX, y: childYAbs },
           type: 'blood'
         });
-        emitNodes(sub, childX, childYAbs, false);
+        emit(sub, childX, childYAbs);
       });
     }
 
-    // Đặt từng cụ tổ
+    // Đặt từng cụ tổ, căn giữa
+    const rootSubtrees = [];
     let totalRootWidth = 0;
-    const rootTrees = [];
     roots.forEach(r => {
-      const t = buildTree(r, 0);
-      if (t) { rootTrees.push(t); totalRootWidth += t.width + CFG.gapX; }
+      const sub = buildSubtree(r, 0);
+      if (sub) {
+        rootSubtrees.push(sub);
+        totalRootWidth += sub.width + CFG.gapX;
+      }
     });
     totalRootWidth = Math.max(0, totalRootWidth - CFG.gapX);
 
-    // Căn giữa các root
-    let rootCursor = CFG.padding + totalRootWidth / 2;
-    rootTrees.forEach(t => {
-      const rootX = rootCursor - t.width / 2 + t.width / 2; // tâm = cursor
-      emitNodes(t, rootCursor, CFG.padding);
-      rootCursor += t.width + CFG.gapX;
-    });
-
-    // Tính bounding
-    const maxX = Math.max(...nodes.map(n => n.x + n.w), 200) + CFG.padding;
-    const maxY = Math.max(...nodes.map(n => n.y + n.h), 200) + CFG.padding;
-
-    console.log(LOG, `layout v5.3: ${nodes.length} nodes, ${links.length} links, ${Math.round(maxX)}×${Math.round(maxY)}`);
-    return { nodes, links, width: maxX, height: maxY };
-  }
-
-    // Link hôn nhân
-    nodes.forEach(n => {
-      if (n.type !== 'spouse') return;
-      const husbandNode = nodes.find(m => m.id === String(n.spouse && n.spouse.id));
-      if (!husbandNode) return;
-      links.push({
-        from: { x: husbandNode.x + NW / 2, y: husbandNode.y + NH },
-        to: { x: n.x + NW / 2, y: n.y },
-        type: 'marry'
-      });
+    let cursorX = CFG.padding + totalRootWidth / 2;
+    rootSubtrees.forEach(sub => {
+      emit(sub, cursorX, CFG.padding);
+      cursorX += sub.width + CFG.gapX;
     });
 
     const maxX = Math.max(...nodes.map(n => n.x + n.w), 200) + CFG.padding;
     const maxY = Math.max(...nodes.map(n => n.y + n.h), 200) + CFG.padding;
 
+    console.log(LOG, `layout v6.0: ${nodes.length} nodes, ${links.length} links, ${Math.round(maxX)}×${Math.round(maxY)}`);
     return { nodes, links, width: maxX, height: maxY };
   }
 
