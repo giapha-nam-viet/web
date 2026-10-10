@@ -42,7 +42,6 @@
   <button class="tab" data-tab="ngoai-pha">Ngoại phả</button>
 </nav>
 
-<!-- 3 NÚT ĐIỀU HƯỚNG ← → TRỞ VỀ -->
 <div class="nav-controls">
   <button class="nav-btn" id="btnNavBack" title="Quay lại">←</button>
   <button class="nav-btn" id="btnNavForward" title="Tiến tới">→</button>
@@ -99,7 +98,6 @@
         <button class="btn btn--primary" id="addPersonBtn">+ Thêm cá nhân</button>
       </div>
 
-      <!-- Thanh điều khiển chế độ sắp xếp -->
       <div id="reorderBar" class="reorder-bar" style="display:none">
         <span class="reorder-bar__info">
           🔀 <strong>Chế độ sắp xếp</strong> — Bấm ▲▼ để đổi thứ tự trong cùng Đời + Chi
@@ -128,11 +126,9 @@
           </select>
           <span class="pedigree-hint">🖱️ Cuộn = zoom • Kéo = di chuyển • Đúp chuột = mở Danh tính</span>
         </div>
-
         <div id="pha-do-svg" style="width:100%; height:600px; overflow:hidden; background:#FDFBF6; border-radius:8px;"></div>
       </div>
     </div>
-   
   </section>
 
   <section class="tab-content" id="tab-ngoai-pha" style="display:none">
@@ -286,20 +282,20 @@
 
       <div class="form-section">
         <h3 class="form-section__title">QUAN HỆ GIA ĐÌNH</h3>
-<div class="form-row">
-  <div class="form-group" style="position:relative;">
-    <label class="form-label">👨 Nhận bố</label>
-    <input type="text" class="form-input" id="fatherSearch" placeholder="Gõ tên bố để tìm hoặc tạo mới..." autocomplete="off">
-    <input type="hidden" id="fatherId">
-    <div id="fatherDropdown" class="autocomplete-dropdown" style="display:none;"></div>
-  </div>
-  <div class="form-group" style="position:relative;">
-    <label class="form-label">👩 Nhận mẹ</label>
-    <input type="text" class="form-input" id="motherSearch" placeholder="Gõ tên mẹ để tìm hoặc tạo mới..." autocomplete="off">
-    <input type="hidden" id="motherId">
-    <div id="motherDropdown" class="autocomplete-dropdown" style="display:none;"></div>
-  </div>
-</div>/div>
+        <div class="form-row">
+          <div class="form-group" style="position:relative;">
+            <label class="form-label">👨 Nhận bố</label>
+            <input type="text" class="form-input" id="fatherSearch" placeholder="Gõ tên bố để tìm hoặc tạo mới..." autocomplete="off">
+            <input type="hidden" id="fatherId">
+            <div id="fatherDropdown" class="autocomplete-dropdown" style="display:none;"></div>
+          </div>
+          <div class="form-group" style="position:relative;">
+            <label class="form-label">👩 Nhận mẹ</label>
+            <input type="text" class="form-input" id="motherSearch" placeholder="Gõ tên mẹ để tìm hoặc tạo mới..." autocomplete="off">
+            <input type="hidden" id="motherId">
+            <div id="motherDropdown" class="autocomplete-dropdown" style="display:none;"></div>
+          </div>
+        </div>
         
         <div class="form-group">
           <label class="form-label">💑 Nhận vợ/chồng</label>
@@ -374,13 +370,9 @@
     </div>
     <!-- END personEditBody -->
 
-    <!-- FOOTER - NÚT TÁC VỤ -->
-    <div class="form-modal__footer" id="personFormFooter">
-      <!-- Sẽ được điền động bằng JS tùy tầng -->
-    </div>
+    <div class="form-modal__footer" id="personFormFooter"></div>
 
   </div>
-  <!-- END .form-modal__content -->
 </div>
 <!-- END #personFormModal -->
 
@@ -502,72 +494,20 @@ Phạm Thị Ngọc Oanh
 Phạm Văn Hải"></textarea>
       </div>
     </div>
-<div class="form-row">
-  <div class="form-group" style="position:relative;">
-    <label class="form-label">👨 Nhận bố</label>
-    <input type="text" class="form-input" id="fatherSearch" placeholder="Gõ tên bố để tìm hoặc tạo mới..." autocomplete="off">
-    <input type="hidden" id="fatherId">
-    <div id="fatherDropdown" class="autocomplete-dropdown" style="display:none;"></div>
-  </div>
-  <div class="form-group" style="position:relative;">
-    <label class="form-label">👩 Nhận mẹ</label>
-    <input type="text" class="form-input" id="motherSearch" placeholder="Gõ tên mẹ để tìm hoặc tạo mới..." autocomplete="off">
-    <input type="hidden" id="motherId">
-    <div id="motherDropdown" class="autocomplete-dropdown" style="display:none;"></div>
+    <div class="form-modal__footer">
+      <div class="form-modal__footer-left">
+        <button type="button" class="btn btn--ghost" onclick="closeQuickAddModal()">Hủy</button>
+      </div>
+      <div class="form-modal__footer-right">
+        <button type="button" class="btn btn--primary" onclick="confirmQuickAdd()">Thêm tất cả</button>
+      </div>
+    </div>
   </div>
 </div>
 
-/* ============================================================
-   AUTOCOMPLETE BỐ/MẸ — form.js v5.0
-   ============================================================ */
-.autocomplete-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background: #fff;
-  border: 1.5px solid #b4c8ca;
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(1, 40, 94, 0.15);
-  max-height: 280px;
-  overflow-y: auto;
-  z-index: 9999;
-  margin-top: 2px;
-}
-.ac-item {
-  padding: 10px 14px;
-  cursor: pointer;
-  border-bottom: 1px solid #f0f4f5;
-  font-size: 14px;
-  color: #01285E;
-  line-height: 1.35;
-  transition: background 0.12s;
-}
-.ac-item:last-child { border-bottom: none; }
-.ac-item:hover, .ac-item:focus { background: #F0F8F9; }
-.ac-item b { font-weight: 600; }
-.ac-gen {
-  display: block;
-  font-size: 11.5px;
-  color: #6b7c7d;
-  margin-top: 2px;
-  font-weight: 400;
-}
-.ac-item--create {
-  color: #C49504;
-  font-weight: 600;
-  border-top: 2px solid #F5EEB3;
-  background: #FFFBF0;
-}
-.ac-item--create:hover { background: #FFF4D6; }
-.ac-item.ac-empty {
-  color: #999;
-  font-style: italic;
-  cursor: default;
-  text-align: center;
-}
 <script src="app.js"></script>
 <script src="form.js?v=5"></script>
 <script src="pedigree.js?v=11"></script>
+
 </body>
 </html>
