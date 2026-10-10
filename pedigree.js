@@ -1,6 +1,5 @@
 /* ============================================================
-   pedigree.js v6.0 — Layout kiểu A (con nằm dưới cha)
-   - Sửa lỗi cấu trúc v5.2/v5.3 hỏng (compute is not defined)
+   pedigree.js v6.1 — Layout kiểu A (con nằm dưới cha)
    - Đệ quy post-order: mỗi cây con có không gian riêng
    - Cha đặt ở tâm các con
    - Cháu nằm dưới con (đệ quy tự nhiên)
@@ -10,7 +9,7 @@
 (function () {
   'use strict';
   const LOG = '[Pedigree]';
-  console.log(LOG, 'v6.0 loaded');
+  console.log(LOG, '⭐ v6.1 loaded — Layout kiểu A');
 
   // ---------- CONFIG ----------
   const CFG = {
@@ -152,7 +151,7 @@
 
   // ---------- 3) COMPUTE LAYOUT (kiểu A: con nằm dưới cha) ----------
   function computeLayout(tree) {
-    console.log(LOG, 'computeLayout v6.0...');
+    console.log(LOG, 'computeLayout v6.1...');
     const { byId, childrenOf, spousesOf, roots } = tree;
     const NW = CFG.node.w, NH = CFG.node.h;
     const spouseGap = CFG.spouseGap;
@@ -168,7 +167,7 @@
       const pid = String(person.id);
       if (treeCache.has(pid)) return treeCache.get(pid);
 
-      // Vợ/chồng (đã loại người đã dùng ở nhánh khác — dùng placed set toàn cục)
+      // Vợ/chồng
       const spouses = (spousesOf.get(pid) || [])
         .sort((a, b) => (a.order || 0) - (b.order || 0))
         .map(s => byId.get(s.spouseId))
@@ -246,7 +245,6 @@
           id: spId, person: sp, spouse: person,
           x: nodeX, y: spY, w: NW, h: NH, type: 'spouse'
         });
-        // Link hôn nhân (dọc)
         links.push({
           from: { x: nodeX + NW / 2, y: spY - spouseGap },
           to:   { x: nodeX + NW / 2, y: spY },
@@ -289,7 +287,7 @@
     const maxX = Math.max(...nodes.map(n => n.x + n.w), 200) + CFG.padding;
     const maxY = Math.max(...nodes.map(n => n.y + n.h), 200) + CFG.padding;
 
-    console.log(LOG, `layout v6.0: ${nodes.length} nodes, ${links.length} links, ${Math.round(maxX)}×${Math.round(maxY)}`);
+    console.log(LOG, `layout v6.1: ${nodes.length} nodes, ${links.length} links, ${Math.round(maxX)}×${Math.round(maxY)}`);
     return { nodes, links, width: maxX, height: maxY };
   }
 
@@ -465,4 +463,10 @@
   }
 
   window.Pedigree = { init, loadAll, buildTree, computeLayout, render, CFG, getLayout: () => layoutData };
+  console.log(LOG, '✓ v6.1 Exports:', {
+    init: typeof init,
+    render: typeof render,
+    buildTree: typeof buildTree,
+    computeLayout: typeof computeLayout
+  });
 })();
