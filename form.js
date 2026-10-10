@@ -1,10 +1,17 @@
 /* ============================================================
-   form.js v5.0 — BẢN SẠCH (700 dòng)
+   form.js v5.1 — BẢN SẠCH (đổi version để phá cache)
+   - Khớp 100% ID trong index.html
+   - Autocomplete Bố/Mẹ
+   - Form: fullName, gender, generation, branch, birthYear...
+   - Avatar crop với cropper.js
+   - Spouse rows, Add child modal, Quick add modal
+   - Contact rows, Char counter, Linked notes
+   - Đồng bộ schema: parent_child (parent_role = 'Bố'/'Mẹ')
    ============================================================ */
 (function () {
   'use strict';
   const LOG = '[Form]';
-  console.log(LOG, 'v5.0 loaded');
+  console.log(LOG, '⭐ v5.1 loaded — fresh from GitHub');
 
   let sb;
   let currentEditingPersonId = null;
@@ -31,7 +38,7 @@
 
   // ============ OPEN / CLOSE MODAL ============
   window.openPersonForm = function (personId) {
-    console.log(LOG, 'openPersonForm', personId);
+    console.log(LOG, 'openPersonForm', personId || '(new)');
     sb = getSupabase();
     currentEditingPersonId = personId || null;
     tempAvatarData = null;
@@ -717,5 +724,10 @@
   window.showEditMode = showEditMode;
 
   // ⭐ LOG XÁC NHẬN CUỐI
-  console.log('[Form] ✓ Exports:', typeof window.openPersonForm, typeof window.savePerson, typeof window.closePersonForm);
+  console.log('[Form] ✓ v5.1 Exports:', {
+    openPersonForm: typeof window.openPersonForm,
+    savePerson: typeof window.savePerson,
+    closePersonForm: typeof window.closePersonForm,
+    switchToEditMode: typeof window.switchToEditMode
+  });
 })();
