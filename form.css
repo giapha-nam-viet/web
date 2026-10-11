@@ -3,8 +3,7 @@
    - Sửa: dùng classList.add/remove('is-visible') thay vì style.display
   z-index: 2147483647 !important; → z-index: 999999 !important;
    - Giữ nguyên 100% logic khác
-   ============================================================ */
-(function () {
+
 
 /* ===== OVERLAY ===== */
 .form-modal {
