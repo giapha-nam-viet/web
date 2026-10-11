@@ -1,17 +1,13 @@
 /* ============================================================
-   form.js v5.1 — BẢN SẠCH (đổi version để phá cache)
-   - Khớp 100% ID trong index.html
-   - Autocomplete Bố/Mẹ
-   - Form: fullName, gender, generation, branch, birthYear...
-   - Avatar crop với cropper.js
-   - Spouse rows, Add child modal, Quick add modal
-   - Contact rows, Char counter, Linked notes
-   - Đồng bộ schema: parent_child (parent_role = 'Bố'/'Mẹ')
+   form.js v5.2 — FIX MODAL KHÔNG HIỆN
+   - Dùng classList.add/remove('is-visible') thay style.display
+   - Vì form.css có: .form-modal:not(.is-visible) { display: none !important; }
+   - Giữ nguyên 100% logic: autocomplete Bố/Mẹ, crop, spouse, children, notes
    ============================================================ */
 (function () {
   'use strict';
   const LOG = '[Form]';
-  console.log(LOG, '⭐ v5.1 loaded — fresh from GitHub');
+  console.log(LOG, '⭐ v5.2 loaded — fix modal is-visible');
 
   let sb;
   let currentEditingPersonId = null;
@@ -35,6 +31,18 @@
       .replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
   }
   function getSupabase() { return window.appSupabase || window.sbClient; }
+
+  // ⭐ Helper: hiện/ẩn modal — thêm class is-visible để form.css cho phép hiện
+  function showModal(el) {
+    if (!el) return;
+    el.classList.add('is-visible');
+    el.style.display = 'flex';
+  }
+  function hideModal(el) {
+    if (!el) return;
+    el.classList.remove('is-visible');
+    el.style.display = 'none';
+  }
 
   // ============ OPEN / CLOSE MODAL ============
   window.openPersonForm = function (personId) {
@@ -60,13 +68,11 @@
       autofillCreatedByName();
     }
 
-    const modal = $('personFormModal');
-    if (modal) modal.style.display = 'flex';
+    showModal($('personFormModal'));
   };
 
   window.closePersonForm = function () {
-    const modal = $('personFormModal');
-    if (modal) modal.style.display = 'none';
+    hideModal($('personFormModal'));
     currentEditingPersonId = null;
     tempAvatarData = null;
   };
@@ -302,7 +308,7 @@
       const modal = $('cropModal'); const img = $('cropImage');
       if (!modal || !img) return;
       img.src = e.target.result;
-      modal.style.display = 'flex';
+      showModal(modal);
       if (cropperInstance) { cropperInstance.destroy(); cropperInstance = null; }
       setTimeout(() => {
         cropperInstance = new Cropper(img, { aspectRatio: 3 / 4, viewMode: 1, autoCropArea: 0.9, background: false });
@@ -312,7 +318,7 @@
   };
 
   window.closeCropModal = function () {
-    const modal = $('cropModal'); if (modal) modal.style.display = 'none';
+    hideModal($('cropModal'));
     if (cropperInstance) { cropperInstance.destroy(); cropperInstance = null; }
     const input = $('avatarInput'); if (input) input.value = '';
   };
@@ -393,10 +399,10 @@
   }
 
   window.openAddChildModal = function () {
-    const m = $('addChildModal'); if (m) m.style.display = 'flex';
+    showModal($('addChildModal'));
     ['childName', 'childBirthYear', 'childOrder'].forEach(id => { const el = $(id); if (el) el.value = ''; });
   };
-  window.closeAddChildModal = function () { const m = $('addChildModal'); if (m) m.style.display = 'none'; };
+  window.closeAddChildModal = function () { hideModal($('addChildModal')); };
 
   window.confirmAddChild = async function () {
     const childName = $('childName')?.value.trim();
@@ -426,10 +432,10 @@
   };
 
   window.openQuickAddModal = function () {
-    const m = $('quickAddModal'); if (m) m.style.display = 'flex';
+    showModal($('quickAddModal'));
     const txt = $('quickAddText'); if (txt) txt.value = '';
   };
-  window.closeQuickAddModal = function () { const m = $('quickAddModal'); if (m) m.style.display = 'none'; };
+  window.closeQuickAddModal = function () { hideModal($('quickAddModal')); };
 
   window.confirmQuickAdd = async function () {
     const raw = $('quickAddText')?.value || '';
@@ -502,10 +508,10 @@
   };
 
   window.openLinkNoteModal = function () {
-    const m = $('linkNoteModal'); if (m) m.style.display = 'flex';
+    showModal($('linkNoteModal'));
     loadAvailableNotes();
   };
-  window.closeLinkNoteModal = function () { const m = $('linkNoteModal'); if (m) m.style.display = 'none'; };
+  window.closeLinkNoteModal = function () { hideModal($('linkNoteModal')); };
 
   async function loadAvailableNotes() {
     const list = $('availableNotesList'); if (!list) return;
@@ -723,8 +729,7 @@
   window.showViewMode = showViewMode;
   window.showEditMode = showEditMode;
 
-  // ⭐ LOG XÁC NHẬN CUỐI
-  console.log('[Form] ✓ v5.1 Exports:', {
+  console.log('[Form] ✓ v5.2 Exports:', {
     openPersonForm: typeof window.openPersonForm,
     savePerson: typeof window.savePerson,
     closePersonForm: typeof window.closePersonForm,
