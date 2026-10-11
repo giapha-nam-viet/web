@@ -1,11 +1,14 @@
 /* ============================================
-   GIA PHẢ NAM VIỆT - APP.JS (v3.4.5)
-   - v3.4.5: sửa gọi openPersonForm qua window (fix undefined)
+   GIA PHẢ NAM VIỆT - APP.JS (v3.4.6)
+   - v3.4.6: CHỐNG double-call openPersonForm
+     + DOMContentLoaded dùng cờ window.__appInitialized
+     + setupAddPerson dùng event delegation + cờ __addPersonBound
+     + createPersonMini dùng data-bound + stopPropagation
+   - v3.4.5: gọi openPersonForm qua window
    - v3.4.4: role_type = Dâu/Rể → LUÔN ở cột phải
    - v3.4: Tự động nhận diện huyết thống vs phối ngẫu
    - v3.3: Phase A — viết hoa + đậm gạch chân
    - v3.0: Đăng nhập bằng mật khẩu
-   - Phase B1: expose sbClient ra window.appSupabase
    ============================================ */
 
 const SUPABASE_URL = 'https://bqojzghxgdkrfyhnvpku.supabase.co';
@@ -38,9 +41,15 @@ window.allNotes = allNotes;
 window.currentUser = currentUser;
 
 /* ============================================
-   KHỞI ĐỘNG
+   KHỞI ĐỘNG — v3.4.6 chống chạy 2 lần
    ============================================ */
 document.addEventListener('DOMContentLoaded', async () => {
+  if (window.__appInitialized) {
+    console.warn('⚠️ App đã init rồi — bỏ qua lần 2');
+    return;
+  }
+  window.__appInitialized = true;
+
   console.log('🚀 Gia Phả Nam Việt đang khởi động...');
   setupTabs();
   setupNavigation();
@@ -565,9 +574,12 @@ function createPersonMini(person) {
   const card = document.createElement('div');
   card.className = 'person-mini';
   card.dataset.id = person.id;
+  card.dataset.bound = '1';
   card.style.cursor = 'pointer';
-  // ⭐ v3.4.5 — gọi qua window.openPersonForm để tránh undefined
-  card.onclick = () => {
+
+  // ⭐ v3.4.6 — stopPropagation + gọi qua window
+  card.onclick = (e) => {
+    e.stopPropagation();
     if (typeof window.openPersonForm === 'function') {
       window.openPersonForm(person.id);
     } else {
@@ -641,12 +653,18 @@ function removeVietnameseTones(str) {
 }
 
 /* ============================================
-   NÚT THÊM NGƯỜI — v3.4.5 (gọi qua window)
+   NÚT THÊM NGƯỜI — v3.4.6 event delegation
    ============================================ */
 function setupAddPerson() {
-  const btn = document.getElementById('addPersonBtn');
-  if (!btn) return;
-  btn.addEventListener('click', () => {
+  if (window.__addPersonBound) return;
+  window.__addPersonBound = true;
+
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('#addPersonBtn');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+
     if (!currentUser) {
       alert('⚠️ Bạn cần đăng nhập trước khi thêm người.');
       document.getElementById('loginModal').style.display = 'flex';
@@ -841,7 +859,7 @@ function formatText(text) {
   return String(content).split('\n').map(line => '<p>' + line + '</p>').join('');
 }
 
-console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v3.4.5)', 'font-size: 20px; color: #01285E; font-weight: bold;');
+console.log('%c🏛️ GIA PHẢ HỌ PHẠM - NAM VIỆT (v3.4.6)', 'font-size: 20px; color: #01285E; font-weight: bold;');
 
 /* ============================================
    BỘ ĐẾM KÝ TỰ
