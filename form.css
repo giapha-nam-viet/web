@@ -5,21 +5,24 @@
    - Giữ nguyên 100% logic khác
    ============================================================ */
 (function () {
-  'use strict';
-  const LOG = '[Form]';
-  console.log(LOG, '⭐ v5.2 loaded — fix modal is-visible');
 
-  let sb;
-  let currentEditingPersonId = null;
-  let currentViewMode = 'view';
-  let tempAvatarData = null;
-  let currentEditingAvatarPath = null;
-  let tempOriginalPerson = null;
-  let allPersonsCache = [];
-  let cropperInstance = null;
-  let tempLinkedNoteIds = [];
-  let tempContactInfo = {};
+/* ===== OVERLAY ===== */
+.form-modal {
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(1, 40, 94, 0.75) !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 999999 !important;
+  padding: 20px !important;
+  overflow-y: auto !important;
+  margin: 0 !important;
+  display: none;
+}
 
+.form-modal.is-visible {
+  display: flex !important;
+}
   function $(id) { return document.getElementById(id); }
   function escHtml(s) {
     if (s == null) return '';
