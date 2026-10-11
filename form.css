@@ -13,7 +13,7 @@
   background: rgba(1, 40, 94, 0.75) !important;
   align-items: center !important;
   justify-content: center !important;
-  z-index: 999999 !important;
+  z-index: 2147483647 !important;
   padding: 20px !important;
   overflow-y: auto !important;
   margin: 0 !important;
