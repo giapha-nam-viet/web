@@ -1,7 +1,7 @@
 /* ============================================================
    form.js v5.2 — Fix modal không hiện
    - Sửa: dùng classList.add/remove('is-visible') thay vì style.display
-   - Vì form.css có .form-modal:not(.is-visible) { display: none !important; }
+  z-index: 9999 !important; → z-index: 999999 !important;
    - Giữ nguyên 100% logic khác
    ============================================================ */
 (function () {
