@@ -171,15 +171,16 @@
       ? 'person-view__name person-view__name--full-dates' : 'person-view__name';
 
     container.innerHTML = `
-      <div class="person-view">
-        ${avatarHtml}
-        <h2 class="${nameClass}">${escHtml(person.full_name || '')}</h2>
-        <p class="person-view__meta">
-          ${years ? '📅 ' + escHtml(years) + ' • ' : ''}Đời ${person.generation || '?'}
-          ${person.gender ? ' • ' + escHtml(person.gender) : ''}
-          ${person.branch ? ' • ' + escHtml(person.branch) : ''}
-        </p>
-        ${fatherName ? `<p class="person-view__row"><b>Bố:</b> ${escHtml(fatherName)}</p>` : ''}
+    if (mode === 'view') {
+    footer.innerHTML = `
+      <div class="form-modal__footer-left">
+        <button type="button" class="btn btn--ghost" onclick="closePersonForm()">Đóng</button>
+      </div>
+      <div class="form-modal__footer-right">
+        <button type="button" class="btn btn--danger btn--small" onclick="deletePerson()">🗑️ Xoá</button>
+        <button type="button" class="btn btn--primary btn--small" onclick="switchToEditMode()">✏️ Sửa</button>
+      </div>`;
+  } else {
         ${motherName ? `<p class="person-view__row"><b>Mẹ:</b> ${escHtml(motherName)}</p>` : ''}
         ${spouseNames.length ? `<p class="person-view__row"><b>Vợ/Chồng:</b> ${escHtml(spouseNames.join(', '))}</p>` : ''}
         ${kidsList.length ? `<p class="person-view__row"><b>Con:</b> ${escHtml(kidsList.map(k => k.full_name).join(', '))}</p>` : ''}
@@ -728,6 +729,45 @@
   window.resetForm = resetForm;
   window.showViewMode = showViewMode;
   window.showEditMode = showEditMode;
+  // ============ DELETE PERSON (xoá cứng) ============
+  window.deletePerson = async function () {
+    if (!currentEditingPersonId) {
+      alert('Không có người để xoá');
+      return;
+    }
+    const person = tempOriginalPerson;
+    const name = person?.full_name || 'người này';
+
+    // Cảnh báo 2 lần
+    if (!confirm('⚠️ Bạn chắc chắn muốn XOÁ VĨNH VIỄN "' + name + '"?\n\nHành động này KHÔNG THỂ khôi phục!')) {
+      return;
+    }
+    if (!confirm('⚠️ XÁC NHẬN LẦN CUỐI:\n\nXoá "' + name + '" và TẤT CẢ quan hệ (bố/mẹ, vợ/chồng, con cái)?')) {
+      return;
+    }
+
+    try {
+      sb = getSupabase();
+      const pid = currentEditingPersonId;
+
+      console.log(LOG, 'deletePerson', pid, name);
+
+      // Xoá các quan hệ trước (tránh foreign key constraint)
+      await sb.from('parent_child').delete().or(`parent_id.eq.${pid},child_id.eq.${pid}`);
+      await sb.from('marriages').delete().or(`husband_id.eq.${pid},wife_id.eq.${pid}`);
+
+      // Xoá person
+      const { error } = await sb.from('persons').delete().eq('id', pid);
+      if (error) throw error;
+
+      alert('✅ Đã xoá "' + name + '"');
+      closePersonForm();
+      location.reload();
+    } catch (e) {
+      console.error(LOG, 'deletePerson error', e);
+      alert('❌ Lỗi xoá: ' + e.message);
+    }
+  };
 
   console.log('[Form] ✓ v5.2 Exports:', {
     openPersonForm: typeof window.openPersonForm,
