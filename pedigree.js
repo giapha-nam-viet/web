@@ -336,14 +336,18 @@
         .attr('data-name', d => (d.person.full_name || '').trim())
         .style('cursor', 'pointer')
         .style('opacity', d => isFaded(d.person) ? 0.55 : 1)
-        .on('click', (evt, d) => {
-          evt.stopPropagation();
-          if (window.PedigreePanel) window.PedigreePanel.show(d.person);
-        })
-        .on('dblclick', (evt, d) => {
-          evt.stopPropagation();
-          if (window.PedigreeLayer2) window.PedigreeLayer2.focus(d.person);
-        });
+       .on('click', (evt, d) => {
+  evt.stopPropagation();
+  console.log('[Pedigree] click → panel:', d.person.full_name);
+  if (window.PedigreePanel) window.PedigreePanel.show(d.person);
+})
+.on('dblclick', (evt, d) => {
+  evt.stopPropagation();
+  console.log('[Pedigree] dblclick → modal:', d.person.full_name);
+  if (typeof window.openPersonForm === 'function') {
+    window.openPersonForm(d.person.id);
+  }
+});
 
       node.append('rect')
         .attr('width', d => d.w).attr('height', d => d.h)
