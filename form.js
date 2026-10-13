@@ -752,7 +752,11 @@
 
       alert('✅ Đã xoá "' + name + '"');
       closePersonForm();
-      location.reload();
+        if (typeof window.refreshAll === 'function') {
+        window.refreshAll();
+      } else {
+        location.reload();
+      }
     } catch (e) {
       console.error(LOG, 'deletePerson error', e);
       alert('❌ Lỗi xoá: ' + e.message);
