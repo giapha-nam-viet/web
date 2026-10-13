@@ -466,7 +466,30 @@
     boot();
   }
 
-  window.Pedigree = { init, loadAll, buildTree, computeLayout, render, CFG, getLayout: () => layoutData };
+ window.Pedigree = {
+  init, loadAll, buildTree, computeLayout, render, CFG,
+  getLayout: () => layoutData,
+  // ⭐ Hàm refresh: load data mới → vẽ lại cây
+  refresh: async function () {
+    console.log(LOG, '🔄 refresh() — reload data + re-render');
+    try {
+      await loadAll();
+      tree = buildTree(persons, parentChild, marriages);
+      if (!tree || !tree.roots.length) {
+        console.warn(LOG, 'Không có data để vẽ');
+        return;
+      }
+      const container = document.getElementById('pha-do-svg');
+      if (!container) return;
+      render(container);
+      fillBranchDropdown();
+      autoFocus();
+      console.log(LOG, '✓ refresh xong');
+    } catch (e) {
+      console.error(LOG, 'refresh error', e);
+    }
+  }
+};
   console.log(LOG, '✓ v6.1 Exports:', {
     init: typeof init,
     render: typeof render,
