@@ -888,3 +888,25 @@ function refreshCharCounters() {
   if (bioField) updateCharCount('bio', 2000);
   if (conflictField) updateCharCount('conflictNote', 1000);
 }
+/* ============================================
+   REFRESH ALL — v3.4.7
+   Sau khi lưu person → vẽ lại cây + load lại data
+   ============================================ */
+window.refreshAll = async function () {
+  console.log('🔄 refreshAll() — bắt đầu');
+
+  // 1. Reload data Danh tính
+  if (typeof loadAllData === 'function') {
+    await loadAllData();
+  }
+  if (typeof loadNotes === 'function') {
+    await loadNotes();
+  }
+
+  // 2. Vẽ lại Phả đồ (nếu có)
+  if (window.Pedigree && typeof window.Pedigree.refresh === 'function') {
+    await window.Pedigree.refresh();
+  }
+
+  console.log('✓ refreshAll xong');
+};
