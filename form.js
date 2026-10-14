@@ -505,7 +505,7 @@ function renderSpouseDropdown(dropdown, matches, searchInput, hiddenInput) {
     try {
       sb = getSupabase();
       const childPayload = {
-        full_name: childName, gender: $('childGender')?.value || 'Nam',
+       full_name: capitalizeName(childName),gender: $('childGender')?.value || 'Nam',
         birth_year: parseInt($('childBirthYear')?.value || '0') || null,
         generation: (parseInt($('generation')?.value || '1') || 1) + 1,
         role_type: 'Huyết thống', special_status: 'Bình thường', is_deleted: false
@@ -707,7 +707,7 @@ function renderSpouseDropdown(dropdown, matches, searchInput, hiddenInput) {
       sb = getSupabase();
       const gen = generation > 0 ? generation : 1;
       const payload = {
-        full_name: fullName, gender: role === 'Bố' ? 'Nam' : 'Nữ', generation: gen,
+        full_name: capitalizeName(fullName), gender: role === 'Bố' ? 'Nam' : 'Nữ', generation: gen,
         role_type: 'Huyết thống', special_status: 'Bình thường', is_deleted: false
       };
       const { data, error } = await sb.from('persons').insert([payload]).select().single();
@@ -723,7 +723,7 @@ function renderSpouseDropdown(dropdown, matches, searchInput, hiddenInput) {
     try {
       sb = getSupabase();
       const payload = {
-     full_name: capitalizeName($('fullName')?.value.trim()),
+        full_name: capitalizeName($('fullName')?.value.trim()),
         gender: $('gender')?.value || null,
         generation: parseInt($('generation')?.value || '0') || null,
         branch: $('branch')?.value.trim() || null,
