@@ -448,12 +448,18 @@ function attachSpouseAutocomplete(searchInput, hiddenInput, dropdown) {
 }
 
 function renderSpouseDropdown(dropdown, matches, searchInput, hiddenInput) {
+  const q = searchInput.value.trim();
   let html = matches.map(p => `
     <div class="ac-item" data-id="${escHtml(p.id)}" data-name="${escHtml(p.full_name)}" data-gen="${p.generation}">
       <b>${escHtml(p.full_name)}</b>
       <span class="ac-gen">Đời ${p.generation || '?'} • ${escHtml(p.gender || '')}</span>
     </div>
   `).join('');
+
+  // ⭐ Thêm "+ Tạo mới" nếu gõ tên chưa có
+  if (q) {
+    html += `<div class="ac-item ac-item--create" data-create="1">+ Tạo mới "${escHtml(q)}"</div>`;
+  }
   if (!html) html = '<div class="ac-item ac-empty">Không tìm thấy</div>';
   dropdown.innerHTML = html;
   dropdown.style.display = 'block';
@@ -461,13 +467,65 @@ function renderSpouseDropdown(dropdown, matches, searchInput, hiddenInput) {
   dropdown.querySelectorAll('.ac-item').forEach(item => {
     item.onmousedown = function (evt) {
       evt.preventDefault();
-      if (item.dataset.id) {
+      if (item.dataset.create) {
+        // ⭐ TẠO MỚI vợ/chồng tự động
+        const newName = searchInput.value.trim();
+        if (!newName) return;
+        const personGen = parseInt($('generation')?.value || '1') || 1;
+        // Vợ/chồng cùng đời với person
+        createSpouseQuick(newName, personGen).then(newId => {
+          if (newId) {
+            searchInput.value = capitalizeName(newName);
+            hiddenInput.value = newId;
+            dropdown.style.display = 'none';
+          }
+        });
+      } else if (item.dataset.id) {
         searchInput.value = item.dataset.name;
         hiddenInput.value = item.dataset.id;
         dropdown.style.display = 'none';
       }
     };
   });
+}
+
+// ⭐ Hàm tạo mới vợ/chồng tự động
+async function createSpouseQuick(fullName, generation) {
+  try {
+    sb = getSupabase();
+    const gen = generation > 0 ? generation : 1;
+    const capitalizedName = capitalizeName(fullName);
+
+    // Đoán giới tính dựa trên tên
+    const isFemale = /thị|nữ|hoa|lan|hương|mai|thu|đào|yến/i.test(capitalizedName);
+    const gender = isFemale ? 'Nữ' : 'Nam';
+    const roleType = 'Dâu/Rể';
+
+    const payload = {
+      full_name: capitalizedName,
+      gender: gender,
+      generation: gen,
+      role_type: roleType,  // ⭐ Dâu/Rể cho vợ/chồng
+      special_status: 'Bình thường',
+      is_deleted: false
+    };
+
+    const { data, error } = await sb.from('persons').insert([payload]).select().single();
+    if (error) throw error;
+
+    console.log(LOG, '⭐ Tạo mới vợ/chồng:', data);
+    allPersonsCache.push({
+      id: data.id,
+      full_name: capitalizedName,
+      generation: gen,
+      gender: gender
+    });
+    return data.id;
+  } catch (e) {
+    console.error(LOG, 'createSpouseQuick error', e);
+    alert('Không tạo được vợ/chồng: ' + e.message);
+    return null;
+  }
 }
 
   window.removeSpouseRow = function (rowId) {
