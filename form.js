@@ -765,7 +765,43 @@ function renderSpouseDropdown(dropdown, matches, searchInput, hiddenInput) {
     } catch (e) { console.error(LOG, 'savePerson', e); alert('Lỗi lưu: ' + e.message); }
   };
 
-  async function saveParentLinks(personId) {
+async function saveParentLinks(personId) {
+  const fatherId = $('fatherId')?.value;
+  const motherId = $('motherId')?.value;
+
+  console.log(LOG, 'saveParentLinks:', { personId, fatherId, motherId });
+
+  // ⭐ Bước 1: XOÁ HẾT link cũ của person này (tránh trùng lặp)
+  const { error: delErr } = await sb.from('parent_child').delete().eq('child_id', personId);
+  if (delErr) {
+    console.error(LOG, 'Xoá link cũ lỗi:', delErr);
+    throw delErr;
+  }
+
+  // ⭐ Bước 2: Insert link mới (chỉ 1 bố + 1 mẹ)
+  const inserts = [];
+  if (fatherId) inserts.push({
+    parent_id: fatherId, child_id: personId,
+    parent_role: 'Bố', relation: 'Con chung',
+    child_type: 'Con chung', is_family_member: true
+  });
+  if (motherId) inserts.push({
+    parent_id: motherId, child_id: personId,
+    parent_role: 'Mẹ', relation: 'Con chung',
+    child_type: 'Con chung', is_family_member: true
+  });
+
+  if (inserts.length) {
+    const { error } = await sb.from('parent_child').insert(inserts);
+    if (error) {
+      console.error(LOG, 'Insert link mới lỗi:', error);
+      throw error;
+    }
+    console.log(LOG, '✓ Đã lưu', inserts.length, 'link cho', personId);
+  } else {
+    console.log(LOG, '⚠️ Không có bố/mẹ — chỉ xoá link cũ');
+  }
+}  async function saveParentLinks(personId) {
     const fatherId = $('fatherId')?.value;
     const motherId = $('motherId')?.value;
     await sb.from('parent_child').delete().eq('child_id', personId);
