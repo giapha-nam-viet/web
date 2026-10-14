@@ -141,8 +141,12 @@
       let kidsList = [];
       if (myKids && myKids.length) {
         const kidIds = myKids.map(k => k.child_id);
-        const { data: kids } = await sb.from('persons').select('id, full_name, generation, gender').in('id', kidIds);
-        kidsList = kids || [];
+const { data: kids } = await sb.from('persons').select('id, full_name, generation, gender, birth_order, sibling_order').in('id', kidIds);
+kidsList = (kids || []).sort((a, b) => {
+  const ao = a.birth_order ?? a.sibling_order ?? 9999;
+  const bo = b.birth_order ?? b.sibling_order ?? 9999;
+  return ao - bo;
+});
       }
 
       renderPersonView(person, spouseNames, fatherName, motherName, kidsList);
