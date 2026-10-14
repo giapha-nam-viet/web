@@ -359,21 +359,107 @@ ${kidsList.length ? `<div class="person-view__row"><b>Con:</b>
   // ============ SPOUSE ============
   window.addSpouseRow = function () { addSpouseRowWithId(null); };
 
-  function addSpouseRowWithId(preselectId) {
-    const container = $('spouseRows');
-    if (!container) return;
-    const rowId = 'spouse-row-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
-    const counter = container.children.length + 1;
-    const row = document.createElement('div');
-    row.className = 'spouse-row'; row.id = rowId;
-    row.innerHTML = `
-      <span class="spouse-row__label">Vợ/Chồng ${counter}:</span>
-      <select class="spouse-select form-input"><option value="">-- Chọn vợ/chồng --</option></select>
-      <button type="button" class="spouse-row__remove" onclick="removeSpouseRow('${rowId}')">×</button>
-    `;
-    container.appendChild(row);
-    populateSpouseSelect(row.querySelector('.spouse-select'), preselectId);
+function addSpouseRowWithId(preselectId) {
+  const container = $('spouseRows');
+  if (!container) return;
+  const rowId = 'spouse-row-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+  const counter = container.children.length + 1;
+  const row = document.createElement('div');
+  row.className = 'spouse-row';
+  row.id = rowId;
+  row.style.position = 'relative';
+  row.style.display = 'grid';
+  row.style.gridTemplateColumns = '100px 1fr auto';
+  row.style.gap = '8px';
+  row.style.alignItems = 'center';
+
+  row.innerHTML = `
+    <span class="spouse-row__label">Vợ/Chồng ${counter}:</span>
+    <div style="position:relative;">
+      <input type="text" class="form-input spouse-search" placeholder="Gõ tên vợ/chồng để tìm..." autocomplete="off">
+      <input type="hidden" class="spouse-id">
+      <div class="spouse-dropdown autocomplete-dropdown" style="display:none;"></div>
+    </div>
+    <button type="button" class="spouse-row__remove" onclick="removeSpouseRow('${rowId}')">×</button>
+  `;
+  container.appendChild(row);
+
+  const searchInput = row.querySelector('.spouse-search');
+  const hiddenInput = row.querySelector('.spouse-id');
+  const dropdown = row.querySelector('.spouse-dropdown');
+
+  if (!allPersonsCache.length) {
+    loadAllPersonsCache().then(() => {
+      attachSpouseAutocomplete(searchInput, hiddenInput, dropdown);
+      if (preselectId) {
+        const found = allPersonsCache.find(p => p.id === preselectId);
+        if (found) {
+          searchInput.value = found.full_name;
+          hiddenInput.value = found.id;
+        }
+      }
+    });
+  } else {
+    attachSpouseAutocomplete(searchInput, hiddenInput, dropdown);
+    if (preselectId) {
+      const found = allPersonsCache.find(p => p.id === preselectId);
+      if (found) {
+        searchInput.value = found.full_name;
+        hiddenInput.value = found.id;
+      }
+    }
   }
+}
+
+// ⭐ Hàm gắn autocomplete cho ô vợ/chồng
+function attachSpouseAutocomplete(searchInput, hiddenInput, dropdown) {
+  if (!searchInput || !hiddenInput || !dropdown) return;
+  if (searchInput.dataset.acBound === '1') return;
+  searchInput.dataset.acBound = '1';
+
+  searchInput.addEventListener('input', function () {
+    hiddenInput.value = '';
+    const q = normalize(searchInput.value.trim());
+    if (q.length < 1) { dropdown.style.display = 'none'; return; }
+    const matches = allPersonsCache.filter(p => normalize(p.full_name).includes(q)).slice(0, 8);
+    renderSpouseDropdown(dropdown, matches, searchInput, hiddenInput);
+  });
+
+  searchInput.addEventListener('focus', function () {
+    const q = normalize(searchInput.value.trim());
+    if (q.length >= 1) {
+      const matches = allPersonsCache.filter(p => normalize(p.full_name).includes(q)).slice(0, 8);
+      renderSpouseDropdown(dropdown, matches, searchInput, hiddenInput);
+    }
+  });
+
+  searchInput.addEventListener('blur', function () {
+    setTimeout(() => { dropdown.style.display = 'none'; }, 250);
+  });
+}
+
+function renderSpouseDropdown(dropdown, matches, searchInput, hiddenInput) {
+  let html = matches.map(p => `
+    <div class="ac-item" data-id="${escHtml(p.id)}" data-name="${escHtml(p.full_name)}" data-gen="${p.generation}">
+      <b>${escHtml(p.full_name)}</b>
+      <span class="ac-gen">Đời ${p.generation || '?'} • ${escHtml(p.gender || '')}</span>
+    </div>
+  `).join('');
+  if (!html) html = '<div class="ac-item ac-empty">Không tìm thấy</div>';
+  dropdown.innerHTML = html;
+  dropdown.style.display = 'block';
+
+  dropdown.querySelectorAll('.ac-item').forEach(item => {
+    item.onmousedown = function (evt) {
+      evt.preventDefault();
+      if (item.dataset.id) {
+        searchInput.value = item.dataset.name;
+        hiddenInput.value = item.dataset.id;
+        dropdown.style.display = 'none';
+      }
+    };
+  });
+}
 
   window.removeSpouseRow = function (rowId) {
     const row = $(rowId); if (row) row.remove();
@@ -384,20 +470,7 @@ ${kidsList.length ? `<div class="person-view__row"><b>Con:</b>
     });
   };
 
-  async function populateSpouseSelect(select, preselectId) {
-    if (!select) return;
-    try {
-      sb = getSupabase();
-      const { data } = await sb.from('persons').select('id, full_name, generation').eq('is_deleted', false).order('generation').order('birth_order');
-      select.innerHTML = '<option value="">-- Chọn vợ/chồng --</option>';
-      (data || []).forEach(p => {
-        const o = document.createElement('option');
-      o.value = p.id; o.textContent = p.full_name;
-        if (preselectId && p.id === preselectId) o.selected = true;
-        select.appendChild(o);
-      });
-    } catch (e) { console.error(LOG, 'populateSpouseSelect', e); }
-  }
+
 
   // ============ CHILDREN ============
   async function loadChildrenList() {
@@ -702,9 +775,9 @@ ${kidsList.length ? `<div class="person-view__row"><b>Con:</b>
     if (inserts.length) { const { error } = await sb.from('parent_child').insert(inserts); if (error) throw error; }
   }
 
-  async function saveSpouseLinks(personId) {
-    const selects = document.querySelectorAll('#spouseRows .spouse-select');
-    const spouseIds = Array.from(selects).map(s => s.value).filter(Boolean);
+async function saveSpouseLinks(personId) {
+  const hiddenInputs = document.querySelectorAll('#spouseRows .spouse-id');
+  const spouseIds = Array.from(hiddenInputs).map(inp => inp.value).filter(Boolean);
     const gender = tempOriginalPerson?.gender || $('gender')?.value;
     await sb.from('marriages').delete().or(`husband_id.eq.${personId},wife_id.eq.${personId}`);
     let order = 1;
