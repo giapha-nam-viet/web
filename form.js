@@ -180,7 +180,7 @@
         </p>
         ${fatherName ? `<p class="person-view__row"><b>Bố:</b> ${escHtml(fatherName)}</p>` : ''}
         ${motherName ? `<p class="person-view__row"><b>Mẹ:</b> ${escHtml(motherName)}</p>` : ''}
-        ${spouseNames.length ? `<p class="person-view__row"><b>Vợ/Chồng:</b> ${escHtml(spouseNames.join(', '))}</p>` : ''}
+       ${spouseNames.length ? `<p class="person-view__row"><b>${person.gender === 'Nam' ? 'Vợ' : 'Chồng'}:</b> ${escHtml(spouseNames.join(', '))}</p>` : ''}
         ${kidsList.length ? `<p class="person-view__row"><b>Con:</b> ${escHtml(kidsList.map(k => k.full_name).join(', '))}</p>` : ''}
         ${person.hometown ? `<p class="person-view__row"><b>Quê:</b> ${escHtml(person.hometown)}</p>` : ''}
         ${person.occupation ? `<p class="person-view__row"><b>Nghề:</b> ${escHtml(person.occupation)}</p>` : ''}
@@ -379,7 +379,7 @@
       select.innerHTML = '<option value="">-- Chọn vợ/chồng --</option>';
       (data || []).forEach(p => {
         const o = document.createElement('option');
-        o.value = p.id; o.textContent = p.full_name + ' (Đời ' + p.generation + ')';
+      o.value = p.id; o.textContent = p.full_name;
         if (preselectId && p.id === preselectId) o.selected = true;
         select.appendChild(o);
       });
