@@ -946,3 +946,42 @@ body.reorder-mode .person-mini:hover {
   cursor: default;
   text-align: center;
 }
+/* ============ Danh sách con trong modal xem ============ */
+.person-view__children-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.person-view__child-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #F5FAFA;
+  border: 1px solid #B8CCE8;
+  border-radius: 16px;
+  font-size: 13px;
+}
+.person-view__child-link {
+  color: #01285E;
+  text-decoration: none;
+  font-weight: 500;
+}
+.person-view__child-link:hover {
+  color: #5c40d9;
+  text-decoration: underline;
+}
+.person-view__child-remove {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 12px;
+  border-radius: 4px;
+  opacity: 0.7;
+}
+.person-view__child-remove:hover {
+  background: #FFEBEE;
+  opacity: 1;
+}
