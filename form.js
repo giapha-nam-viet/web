@@ -31,7 +31,16 @@
       .replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
   }
   function getSupabase() { return window.appSupabase || window.sbClient; }
-
+// ⭐ Viết hoa chữ cái đầu mỗi từ
+function capitalizeName(name) {
+  if (!name) return '';
+  return name
+    .toLowerCase()
+    .split(' ')
+    .filter(w => w.length > 0)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
   function showModal(el) {
     if (!el) return;
     el.classList.add('is-visible');
@@ -714,7 +723,7 @@ function renderSpouseDropdown(dropdown, matches, searchInput, hiddenInput) {
     try {
       sb = getSupabase();
       const payload = {
-        full_name: $('fullName')?.value.trim(),
+     full_name: capitalizeName($('fullName')?.value.trim()),
         gender: $('gender')?.value || null,
         generation: parseInt($('generation')?.value || '0') || null,
         branch: $('branch')?.value.trim() || null,
