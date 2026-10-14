@@ -185,7 +185,16 @@ kidsList = (kids || []).sort((a, b) => {
         ${fatherName ? `<p class="person-view__row"><b>Bố:</b> ${escHtml(fatherName)}</p>` : ''}
         ${motherName ? `<p class="person-view__row"><b>Mẹ:</b> ${escHtml(motherName)}</p>` : ''}
        ${spouseNames.length ? `<p class="person-view__row"><b>${person.gender === 'Nam' ? 'Vợ' : 'Chồng'}:</b> ${escHtml(spouseNames.join(', '))}</p>` : ''}
-        ${kidsList.length ? `<p class="person-view__row"><b>Con:</b> ${escHtml(kidsList.map(k => k.full_name).join(', '))}</p>` : ''}
+${kidsList.length ? `<div class="person-view__row"><b>Con:</b>
+  <div class="person-view__children-list">
+    ${kidsList.map(k => `
+      <span class="person-view__child-item">
+        <a href="#" class="person-view__child-link" onclick="event.preventDefault(); if(window.openPersonForm) window.openPersonForm('${escHtml(k.id)}');">${escHtml(k.full_name)}</a>
+        <button type="button" class="person-view__child-remove" title="Xoá con khỏi danh sách" onclick="event.preventDefault(); window.removeChildLink('${escHtml(k.id)}', '${escHtml(person.id)}')">🗑️</button>
+      </span>
+    `).join('')}
+  </div>
+</div>` : ''}
         ${person.hometown ? `<p class="person-view__row"><b>Quê:</b> ${escHtml(person.hometown)}</p>` : ''}
         ${person.occupation ? `<p class="person-view__row"><b>Nghề:</b> ${escHtml(person.occupation)}</p>` : ''}
         ${person.bio ? `<p class="person-view__row"><b>Tiểu sử:</b> ${escHtml(person.bio)}</p>` : ''}
@@ -766,7 +775,33 @@ kidsList = (kids || []).sort((a, b) => {
       alert('❌ Lỗi xoá: ' + e.message);
     }
   };
+  // ============ REMOVE CHILD LINK (chỉ xoá quan hệ) ============
+  window.removeChildLink = async function (childId, parentId) {
+    if (!childId || !parentId) return;
+    const child = (allPersonsCache.find(p => p.id === childId)) || {};
+    const childName = child.full_name || 'người này';
 
+    if (!confirm('🗑️ Xoá "' + childName + '" khỏi danh sách con của người này?\n\n(Lưu ý: chỉ xoá quan hệ bố/mẹ-con, KHÔNG xoá person khỏi hệ thống)')) {
+      return;
+    }
+
+    try {
+      sb = getSupabase();
+      const { error } = await sb.from('parent_child').delete().eq('child_id', childId).eq('parent_id', parentId);
+      if (error) throw error;
+
+      console.log(LOG, 'Đã xoá link con:', childName);
+      alert('✅ Đã xoá "' + childName + '" khỏi danh sách con');
+
+      if (currentEditingPersonId) {
+        showViewMode(currentEditingPersonId);
+      }
+      if (typeof window.refreshAll === 'function') window.refreshAll();
+    } catch (e) {
+      console.error(LOG, 'removeChildLink error', e);
+      alert('❌ Lỗi: ' + e.message);
+    }
+  };
   // ============ EXPOSE ============
   window.resetForm = resetForm;
   window.showViewMode = showViewMode;
