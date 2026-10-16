@@ -35,6 +35,8 @@
   let tree = null;
   let currentScale = 1;
   let layoutData = null;
+  let viewMode = 'all';        // 'all' | 'family'
+  let familyFocusId = null;    // ID người focus khi viewMode='family'
 
   // ---------- HELPERS ----------
   function isBlood(p) { return p && p.role_type === 'Huyết thống'; }
@@ -60,8 +62,9 @@
       const container = document.getElementById('pha-do-svg');
       if (!container) { console.warn(LOG, 'Không tìm thấy #pha-do-svg'); return; }
 
-           setupToolbar();
+      setupToolbar();
       setupSearch();
+      setupViewToggle();
       loadAll()
         .then(() => {
           tree = buildTree(persons, parentChild, marriages);
@@ -292,12 +295,171 @@
     return { nodes, links, width: maxX, height: maxY };
   }
 
-  // ---------- 4) RENDER ----------
+  // ---------- 3.5) FAMILY LAYOUT (Lớp 2) ----------
+  function computeFamilyLayout(tree, focusId) {
+    console.log(LOG, 'computeFamilyLayout for', focusId);
+    const { byId, childrenOf, spousesOf, parentsOf } = tree;
+    const NW = CFG.node.w, NH = CFG.node.h;
+    const gapX = 40, gapY = 120, padding = 60;
+
+    const focus = byId.get(String(focusId));
+    if (!focus) {
+      console.warn(LOG, 'Không tìm thấy focus:', focusId);
+      return null;
+    }
+
+    const nodes = [];
+    const links = [];
+
+    // --- Tầng 1: Bố + Mẹ của focus ---
+    const parentIds = parentsOf.get(String(focusId)) || [];
+    let father = null, mother = null;
+    parentIds.forEach(pid => {
+      const plink = parentChild.find(l =>
+        String(l.parent_id) === String(pid) && String(l.child_id) === String(focusId)
+      );
+      if (!plink) return;
+      if (plink.parent_role === 'Bố') father = byId.get(String(pid));
+      else if (plink.parent_role === 'Mẹ') mother = byId.get(String(pid));
+    });
+
+    // --- Tầng 2: Focus + vợ/chồng ---
+    const focusSpouses = (spousesOf.get(String(focusId)) || [])
+      .sort((a, b) => (a.order || 0) - (b.order || 0))
+      .map(s => byId.get(String(s.spouseId)))
+      .filter(Boolean);
+
+    // --- Tầng 3: Con của focus ---
+    const focusChildren = (childrenOf.get(String(focusId)) || [])
+      .map(cid => byId.get(String(cid)))
+      .filter(Boolean)
+      .sort((a, b) => sortKey(a) - sortKey(b));
+
+    // ===== TÍNH TOÁN VỊ TRÍ =====
+    const spousesCount = focusSpouses.length;
+    const focusX = padding + NW / 2 + Math.max(0, spousesCount - 1) * (NW + gapX) / 2 + (spousesCount > 0 ? NW + gapX : 0) / 2;
+    const tier2Y = padding + ((father || mother) ? NH + gapY : 0);
+    const focusY = tier2Y;
+
+    // Node focus
+    nodes.push({
+      id: String(focus.id), person: focus, spouse: null,
+      x: focusX - NW / 2, y: focusY, w: NW, h: NH,
+      type: isBlood(focus) ? 'blood' : 'spouse'
+    });
+
+    // Vợ/chồng xếp ngang 2 bên focus
+    const spousesLeft = Math.ceil(spousesCount / 2);
+    const spousesRight = spousesCount - spousesLeft;
+    focusSpouses.forEach((sp, idx) => {
+      const sideOffset = idx < spousesLeft ? (idx - spousesLeft) : (idx - spousesLeft + 1);
+      const spX = focusX + sideOffset * (NW + gapX);
+      nodes.push({
+        id: String(sp.id), person: sp, spouse: focus,
+        x: spX - NW / 2, y: focusY, w: NW, h: NH, type: 'spouse'
+      });
+      // Link hôn nhân ngang
+      const fromX = spX > focusX ? focusX + NW / 2 : spX + NW / 2;
+      const toX = spX > focusX ? spX - NW / 2 : focusX - NW / 2;
+      links.push({
+        from: { x: fromX, y: focusY + NH / 2 },
+        to:   { x: toX, y: focusY + NH / 2 },
+        type: 'marry'
+      });
+    });
+
+    // --- Tầng 1: Bố Mẹ ở trên, căn giữa theo focus ---
+    if (father || mother) {
+      const parentY = padding;
+      const spouseGapH = 20;
+      if (father && mother) {
+        const pairWidth = NW * 2 + spouseGapH;
+        const fatherCx = focusX - pairWidth / 2 + NW / 2;
+        const motherCx = focusX + pairWidth / 2 - NW / 2;
+        nodes.push({ id: String(father.id), person: father, spouse: mother, x: fatherCx - NW / 2, y: parentY, w: NW, h: NH, type: 'blood' });
+        nodes.push({ id: String(mother.id), person: mother, spouse: father, x: motherCx - NW / 2, y: parentY, w: NW, h: NH, type: 'spouse' });
+        links.push({
+          from: { x: fatherCx + NW / 2, y: parentY + NH / 2 },
+          to:   { x: motherCx - NW / 2, y: parentY + NH / 2 },
+          type: 'marry'
+        });
+        links.push({
+          from: { x: focusX, y: parentY + NH },
+          to:   { x: focusX, y: focusY },
+          type: 'blood'
+        });
+      } else if (father) {
+        nodes.push({ id: String(father.id), person: father, spouse: null, x: focusX - NW / 2, y: parentY, w: NW, h: NH, type: 'blood' });
+        links.push({ from: { x: focusX, y: parentY + NH }, to: { x: focusX, y: focusY }, type: 'blood' });
+      } else if (mother) {
+        nodes.push({ id: String(mother.id), person: mother, spouse: null, x: focusX - NW / 2, y: parentY, w: NW, h: NH, type: 'spouse' });
+        links.push({ from: { x: focusX, y: parentY + NH }, to: { x: focusX, y: focusY }, type: 'blood' });
+      }
+    }
+
+    // --- Tầng 3: Con ở dưới — mỗi con nối ĐÚNG cặp bố-mẹ đẻ ---
+    const childY = focusY + NH + gapY;
+    const childTotal = focusChildren.length;
+    if (childTotal) {
+      const childTotalWidth = childTotal * NW + (childTotal - 1) * gapX;
+      const childStartX = focusX - childTotalWidth / 2 + NW / 2;
+      focusChildren.forEach((c, idx) => {
+        const cX = childStartX + idx * (NW + gapX);
+        nodes.push({
+          id: String(c.id), person: c, spouse: null,
+          x: cX - NW / 2, y: childY, w: NW, h: NH, type: 'blood'
+        });
+
+        // Tìm bố/mẹ đẻ của con này
+        const childLinks = parentChild.filter(l => String(l.child_id) === String(c.id));
+        const cFather = childLinks.find(l => l.parent_role === 'Bố');
+        const cMother = childLinks.find(l => l.parent_role === 'Mẹ');
+        const fatherNode = cFather ? nodes.find(n => n.id === String(cFather.parent_id)) : null;
+        const motherNode = cMother ? nodes.find(n => n.id === String(cMother.parent_id)) : null;
+
+        // Điểm xuất phát link: giữa cặp bố-mẹ nếu có cả 2
+        let fromX, fromY;
+        if (fatherNode && motherNode) {
+          fromX = (fatherNode.x + fatherNode.w / 2 + motherNode.x + motherNode.w / 2) / 2;
+          fromY = fatherNode.y + NH;
+        } else if (fatherNode) {
+          fromX = fatherNode.x + fatherNode.w / 2;
+          fromY = fatherNode.y + NH;
+        } else if (motherNode) {
+          fromX = motherNode.x + motherNode.w / 2;
+          fromY = motherNode.y + NH;
+        } else {
+          fromX = focusX;
+          fromY = focusY + NH;
+        }
+
+        // Link chữ L từ cặp bố-mẹ xuống con
+        links.push({
+          from: { x: fromX, y: fromY },
+          to:   { x: cX, y: childY },
+          type: 'blood',
+          isFamily: true
+        });
+      });
+    }
+
+    const maxX = Math.max(...nodes.map(n => n.x + n.w), 400) + padding;
+    const maxY = Math.max(...nodes.map(n => n.y + n.h), 300) + padding;
+
+    console.log(LOG, `familyLayout: ${nodes.length} nodes, ${links.length} links`);
+    return { nodes, links, width: maxX, height: maxY };
+  }
+
+     // ---------- 4) RENDER ----------
   function render(container) {
     console.log(LOG, 'render...');
     try {
       container.innerHTML = '';
-      layoutData = computeLayout(tree);
+      if (viewMode === 'family' && familyFocusId) {
+        layoutData = computeFamilyLayout(tree, familyFocusId) || computeLayout(tree);
+      } else {
+        layoutData = computeLayout(tree);
+      }
       const { nodes, links, width, height } = layoutData;
       console.log(LOG, `layout: ${nodes.length} nodes, ${links.length} links, ${width}×${height}`);
 
@@ -320,7 +482,9 @@
       linkG.selectAll('path').data(links).enter().append('path')
         .attr('d', d => {
           if (d.type === 'marry') return `M${d.from.x},${d.from.y} L${d.to.x},${d.to.y}`;
-          const midY = (d.from.y + d.to.y) / 2;
+          const midY = d.isFamily
+            ? d.from.y + (d.to.y - d.from.y) / 2
+            : (d.from.y + d.to.y) / 2;
           return `M${d.from.x},${d.from.y} V${midY} H${d.to.x} V${d.to.y}`;
         })
         .attr('fill', 'none')
@@ -340,6 +504,13 @@
        .on('click', (evt, d) => {
   evt.stopPropagation();
   console.log('[Pedigree] click → panel:', d.person.full_name);
+  // Nếu đang ở chế độ Lớp 2 → focus gia đình người này
+  if (viewMode === 'family') {
+    familyFocusId = String(d.person.id);
+    const container = document.getElementById('pha-do-svg');
+    if (container) render(container);
+    console.log('[Pedigree] → Focus family:', d.person.full_name);
+  }
   if (window.PedigreePanel) window.PedigreePanel.show(d.person);
 })
 .on('dblclick', (evt, d) => {
@@ -410,7 +581,42 @@
     if (bRst) bRst.onclick = () => resetZoom();
     if (sel) sel.onchange = () => filterBranch(sel.value);
   }
-  function setupSearch() {
+  // ---------- 5.4) VIEW TOGGLE (Toàn cảnh / Lớp 2) ----------
+  function setupViewToggle() {
+    const btnAll = document.getElementById('pd-view-all');
+    const btnFam = document.getElementById('pd-view-family');
+    if (!btnAll || !btnFam) {
+      console.warn(LOG, 'Không tìm thấy nút toggle');
+      return;
+    }
+
+    btnAll.onclick = () => {
+      viewMode = 'all';
+      familyFocusId = null;
+      btnAll.classList.add('is-active');
+      btnFam.classList.remove('is-active');
+      const container = document.getElementById('pha-do-svg');
+      if (container) render(container);
+      console.log(LOG, '→ Chế độ Toàn cảnh');
+    };
+
+    btnFam.onclick = () => {
+      viewMode = 'family';
+      btnFam.classList.add('is-active');
+      btnAll.classList.remove('is-active');
+      if (!familyFocusId && tree && tree.roots && tree.roots[0]) {
+        familyFocusId = String(tree.roots[0].id);
+      }
+      const container = document.getElementById('pha-do-svg');
+      if (container) render(container);
+      console.log(LOG, '→ Chế độ Lớp 2, focus:', familyFocusId);
+    };
+
+    btnAll.classList.add('is-active');
+    console.log(LOG, 'setupViewToggle OK');
+  }
+
+   function setupSearch() {
     const input = document.getElementById('pd-search');
     const clearBtn = document.getElementById('pd-search-clear');
     if (!input) return;
