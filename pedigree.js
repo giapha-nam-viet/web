@@ -25,7 +25,7 @@
       linkBlood: '#bd9733',
       linkMarry: '#C97A7A'
     },
-    zoom: { step: 0.15, min: 0.3, max: 2.5 },
+    zoom: { step: 0.15, min: 0.3, max: 4.0 },
     focusName: 'Phạm Văn Mỹ'
   };
 
@@ -458,7 +458,7 @@
         if (match && !firstMatch) firstMatch = d;
       });
       if (firstMatch && svg && zoomBehavior) {
-        const k = 1.8;
+        const k = 3.0;
         const NW = CFG.node.w, NH = CFG.node.h;
         const centerX = firstMatch.x + NW / 2;
         const centerY = firstMatch.y + NH / 2;
