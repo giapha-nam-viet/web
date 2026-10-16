@@ -420,7 +420,17 @@
       if (clearBtn) clearBtn.style.display = q ? 'inline-block' : 'none';
 
       if (!q) {
-        gRoot.selectAll('g.node').style('opacity', d => isFaded(d.person) ? 0.55 : 1);
+        gRoot.selectAll('g.node').each(function () {
+          const sel = d3.select(this);
+          const d = sel.datum();
+          sel.style('opacity', isFaded(d.person) ? 0.55 : 1);
+          // Restore màu gốc
+          const isSp = sel.classed('node-spouse');
+          sel.select('rect')
+            .attr('stroke', isSp ? CFG.colors.spouse.stroke : CFG.colors.blood.stroke)
+            .attr('stroke-width', isSp ? 1.5 : 2.5)
+            .attr('filter', null);
+        });
         return;
       }
 
@@ -430,15 +440,33 @@
       gRoot.selectAll('g.node').each(function (d) {
         const name = (d.person.full_name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         const match = name.includes(qNorm);
-        d3.select(this).style('opacity', match ? 1 : 0.15);
+        const sel = d3.select(this);
+        sel.style('opacity', match ? 1 : 0.15);
+        // ⭐ Thêm/ bỏ glow vàng cho node khớp
+        const rect = sel.select('rect');
+        if (match) {
+          rect.attr('stroke', '#F2C94C').attr('stroke-width', 3.5);
+          // Xoá filter cũ (nếu có) rồi add mới
+          rect.attr('filter', 'url(#focus-glow)');
+        } else {
+          // Restore màu gốc tuỳ loại node
+          const isSp = sel.classed('node-spouse');
+          rect.attr('stroke', isSp ? CFG.colors.spouse.stroke : CFG.colors.blood.stroke);
+          rect.attr('stroke-width', isSp ? 1.5 : 2.5);
+          rect.attr('filter', null);
+        }
         if (match && !firstMatch) firstMatch = d;
       });
-
       if (firstMatch && svg && zoomBehavior) {
-        const k = 1.2;
-        const tx = layoutData.width / 2 - firstMatch.x * k;
-        const ty = layoutData.height / 2 - firstMatch.y * k;
-        svg.transition().duration(400).call(
+        const k = 1.8;
+        const NW = CFG.node.w, NH = CFG.node.h;
+        const centerX = firstMatch.x + NW / 2;
+        const centerY = firstMatch.y + NH / 2;
+        const svgW = svg.node().clientWidth || 800;
+        const svgH = svg.node().clientHeight || 600;
+        const tx = svgW / 2 - centerX * k;
+        const ty = svgH / 2 - centerY * k;
+        svg.transition().duration(500).call(
           zoomBehavior.transform,
           d3.zoomIdentity.translate(tx, ty).scale(k)
         );
