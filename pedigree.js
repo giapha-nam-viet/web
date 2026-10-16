@@ -458,7 +458,7 @@
         if (match && !firstMatch) firstMatch = d;
       });
       if (firstMatch && svg && zoomBehavior) {
-        const k = 3.0;
+        const k = 4.0;
         const NW = CFG.node.w, NH = CFG.node.h;
         const centerX = firstMatch.x + NW / 2;
         const centerY = firstMatch.y + NH / 2;
