@@ -466,7 +466,7 @@
         const svgH = svg.node().clientHeight || 600;
         const tx = svgW / 2 - centerX * k;
         const ty = svgH / 2 - centerY * k;
-        svg.transition().duration(500).call(
+svg.transition().duration(800).ease(d3.easeCubicOut).call(
           zoomBehavior.transform,
           d3.zoomIdentity.translate(tx, ty).scale(k)
         );
