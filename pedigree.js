@@ -60,7 +60,8 @@
       const container = document.getElementById('pha-do-svg');
       if (!container) { console.warn(LOG, 'Không tìm thấy #pha-do-svg'); return; }
 
-      setupToolbar();
+           setupToolbar();
+      setupSearch();
       loadAll()
         .then(() => {
           tree = buildTree(persons, parentChild, marriages);
@@ -409,7 +410,51 @@
     if (bRst) bRst.onclick = () => resetZoom();
     if (sel) sel.onchange = () => filterBranch(sel.value);
   }
-  function zoomBy(d) {
+  function setupSearch() {
+    const input = document.getElementById('pd-search');
+    const clearBtn = document.getElementById('pd-search-clear');
+    if (!input) return;
+
+    input.addEventListener('input', function () {
+      const q = this.value.trim();
+      if (clearBtn) clearBtn.style.display = q ? 'inline-block' : 'none';
+
+      if (!q) {
+        gRoot.selectAll('g.node').style('opacity', d => isFaded(d.person) ? 0.55 : 1);
+        return;
+      }
+
+      const qNorm = q.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      let firstMatch = null;
+
+      gRoot.selectAll('g.node').each(function (d) {
+        const name = (d.person.full_name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const match = name.includes(qNorm);
+        d3.select(this).style('opacity', match ? 1 : 0.15);
+        if (match && !firstMatch) firstMatch = d;
+      });
+
+      if (firstMatch && svg && zoomBehavior) {
+        const k = 1.2;
+        const tx = layoutData.width / 2 - firstMatch.x * k;
+        const ty = layoutData.height / 2 - firstMatch.y * k;
+        svg.transition().duration(400).call(
+          zoomBehavior.transform,
+          d3.zoomIdentity.translate(tx, ty).scale(k)
+        );
+      }
+    });
+
+    if (clearBtn) {
+      clearBtn.onclick = () => {
+        input.value = '';
+        input.dispatchEvent(new Event('input'));
+      };
+    }
+    console.log(LOG, 'setupSearch OK');
+  }
+
+   function zoomBy(d) {
     if (!svg || !zoomBehavior) return;
     const k = Math.max(CFG.zoom.min, Math.min(CFG.zoom.max, currentScale + d));
     svg.transition().duration(200).call(zoomBehavior.scaleTo, k);
