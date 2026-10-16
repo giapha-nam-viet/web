@@ -300,7 +300,10 @@
     console.log(LOG, 'computeFamilyLayout for', focusId);
     const { byId, childrenOf, spousesOf, parentsOf } = tree;
     const NW = CFG.node.w, NH = CFG.node.h;
-    const gapX = 40, gapY = 120, padding = 60;
+    const gapTier = 130;   // khoảng cách tầng
+    const gapSpouse = 90;  // khoảng cách vợ dọc
+    const gapPair = 20;    // khoảng cách cặp đôi ngang
+    const padding = 60;
 
     const focus = byId.get(String(focusId));
     if (!focus) {
@@ -311,7 +314,8 @@
     const nodes = [];
     const links = [];
 
-    // --- Tầng 1: Bố + Mẹ của focus ---
+    // ===== XÁC ĐỊNH QUAN HỆ =====
+    // Bố + Mẹ đẻ của focus
     const parentIds = parentsOf.get(String(focusId)) || [];
     let father = null, mother = null;
     parentIds.forEach(pid => {
@@ -323,135 +327,209 @@
       else if (plink.parent_role === 'Mẹ') mother = byId.get(String(pid));
     });
 
-    // --- Tầng 2: Focus + vợ/chồng ---
+    // Vợ/chồng của focus
     const focusSpouses = (spousesOf.get(String(focusId)) || [])
       .sort((a, b) => (a.order || 0) - (b.order || 0))
       .map(s => byId.get(String(s.spouseId)))
       .filter(Boolean);
 
-    // --- Tầng 3: Con của focus ---
+    // Con của focus (tất cả các vợ)
     const focusChildren = (childrenOf.get(String(focusId)) || [])
       .map(cid => byId.get(String(cid)))
       .filter(Boolean)
       .sort((a, b) => sortKey(a) - sortKey(b));
 
-    // ===== TÍNH TOÁN VỊ TRÍ =====
-    const spousesCount = focusSpouses.length;
-    const focusX = padding + NW / 2 + Math.max(0, spousesCount - 1) * (NW + gapX) / 2 + (spousesCount > 0 ? NW + gapX : 0) / 2;
-    const tier2Y = padding + ((father || mother) ? NH + gapY : 0);
-    const focusY = tier2Y;
+    // Phân nhóm con theo mẹ
+    const childrenByMother = new Map(); // motherId → [con]
+    const childrenNoMother = [];        // con không có mẹ
+    focusChildren.forEach(child => {
+      const childLinks = parentChild.filter(l => String(l.child_id) === String(child.id));
+      const motherLink = childLinks.find(l => l.parent_role === 'Mẹ');
+      if (motherLink) {
+        const mId = String(motherLink.parent_id);
+        if (!childrenByMother.has(mId)) childrenByMother.set(mId, []);
+        childrenByMother.get(mId).push(child);
+      } else {
+        childrenNoMother.push(child);
+      }
+    });
 
-    // Node focus
+    console.log(LOG, 'Phân nhóm:', {
+      father: father?.full_name,
+      mother: mother?.full_name,
+      spouses: focusSpouses.length,
+      childrenNoMother: childrenNoMother.length,
+      mothersWithChildren: childrenByMother.size
+    });
+
+    // TÍNH TOÁN VỊ TRÍ — sẽ viết ở P2, P3, P4
+    
+    // ===== P2: TẦNG 1 — BỐ MẸ ĐẺ =====
+    const focusX = padding + 260;
+    const tier1Y = padding;
+    const tier2Y = tier1Y + ((father || mother) ? NH + gapTier : 0);
+
+    if (father || mother) {
+      const pairGapX = 20;
+      const pairWidth = NW * 2 + pairGapX;
+      const fatherCx = focusX - pairWidth / 2 + NW / 2;
+      const motherCx = focusX + pairWidth / 2 - NW / 2;
+
+      if (father && mother) {
+        nodes.push({
+          id: String(father.id), person: father, spouse: mother,
+          x: fatherCx - NW / 2, y: tier1Y, w: NW, h: NH, type: 'blood'
+        });
+        nodes.push({
+          id: String(mother.id), person: mother, spouse: father,
+          x: motherCx - NW / 2, y: tier1Y, w: NW, h: NH, type: 'spouse'
+        });
+        links.push({
+          from: { x: fatherCx + NW / 2, y: tier1Y + NH / 2 },
+          to:   { x: motherCx - NW / 2, y: tier1Y + NH / 2 },
+          type: 'marry'
+        });
+      } else if (father) {
+        nodes.push({
+          id: String(father.id), person: father, spouse: null,
+          x: focusX - NW / 2, y: tier1Y, w: NW, h: NH, type: 'blood'
+        });
+      } else if (mother) {
+        nodes.push({
+          id: String(mother.id), person: mother, spouse: null,
+          x: focusX - NW / 2, y: tier1Y, w: NW, h: NH, type: 'spouse'
+        });
+      }
+    } 
+
+    // ===== P3: TẦNG 2 — FOCUS + VỢ DỌC =====
     nodes.push({
       id: String(focus.id), person: focus, spouse: null,
-      x: focusX - NW / 2, y: focusY, w: NW, h: NH,
+      x: focusX - NW / 2, y: tier2Y, w: NW, h: NH,
       type: isBlood(focus) ? 'blood' : 'spouse'
     });
 
-    // Vợ/chồng xếp ngang 2 bên focus
-    const spousesLeft = Math.ceil(spousesCount / 2);
-    const spousesRight = spousesCount - spousesLeft;
-    focusSpouses.forEach((sp, idx) => {
-      const sideOffset = idx < spousesLeft ? (idx - spousesLeft) : (idx - spousesLeft + 1);
-      const spX = focusX + sideOffset * (NW + gapX);
+    // Link từ bố mẹ xuống focus (nếu có bố/mẹ)
+    if (father || mother) {
+      links.push({
+        from: { x: focusX, y: tier1Y + NH },
+        to:   { x: focusX, y: tier2Y },
+        type: 'blood'
+      });
+    }
+
+    // Vợ/chồng xếp DỌC dưới focus
+    let spouseY = tier2Y + NH + 40;   // khoảng cách giữa focus và vợ 1
+    focusSpouses.forEach(sp => {
       nodes.push({
         id: String(sp.id), person: sp, spouse: focus,
-        x: spX - NW / 2, y: focusY, w: NW, h: NH, type: 'spouse'
+        x: focusX - NW / 2, y: spouseY, w: NW, h: NH, type: 'spouse'
       });
-      // Link hôn nhân ngang
-      const fromX = spX > focusX ? focusX + NW / 2 : spX + NW / 2;
-      const toX = spX > focusX ? spX - NW / 2 : focusX - NW / 2;
+      // Link hôn nhân dọc (focus ↔ vợ 1, vợ 1 ↔ vợ 2...)
+      const prevY = spouseY === tier2Y + NH + 40 ? tier2Y + NH : spouseY - gapSpouse + NH;
       links.push({
-        from: { x: fromX, y: focusY + NH / 2 },
-        to:   { x: toX, y: focusY + NH / 2 },
+        from: { x: focusX, y: prevY },
+        to:   { x: focusX, y: spouseY },
         type: 'marry'
       });
+      spouseY += NH + gapSpouse;
     });
+ 
+    // ===== P4: TẦNG 3 — CON + VỢ/CHỒNG CỦA CON =====
+    const tier3StartY = spouseY + gapTier;
+    const groupGapY = 40;   // khoảng cách giữa các nhóm con
 
-    // --- Tầng 1: Bố Mẹ ở trên, căn giữa theo focus ---
-    if (father || mother) {
-      const parentY = padding;
-      const spouseGapH = 20;
-      if (father && mother) {
-        const pairWidth = NW * 2 + spouseGapH;
-        const fatherCx = focusX - pairWidth / 2 + NW / 2;
-        const motherCx = focusX + pairWidth / 2 - NW / 2;
-        nodes.push({ id: String(father.id), person: father, spouse: mother, x: fatherCx - NW / 2, y: parentY, w: NW, h: NH, type: 'blood' });
-        nodes.push({ id: String(mother.id), person: mother, spouse: father, x: motherCx - NW / 2, y: parentY, w: NW, h: NH, type: 'spouse' });
-        links.push({
-          from: { x: fatherCx + NW / 2, y: parentY + NH / 2 },
-          to:   { x: motherCx - NW / 2, y: parentY + NH / 2 },
-          type: 'marry'
-        });
-        links.push({
-          from: { x: focusX, y: parentY + NH },
-          to:   { x: focusX, y: focusY },
+    // Vị trí X cột 2 (bên phải focus)
+    const col2X = focusX + NW + 120;
+
+    // Hàm tiện ích: vẽ 1 nhóm con (danh sách cặp [con, vợ/chồng])
+    let currentGroupY = tier3StartY;
+    function drawChildGroup(children, linkFromX, linkFromY, label) {
+      children.forEach(child => {
+        const childSpouses = (spousesOf.get(String(child.id)) || [])
+          .sort((a, b) => (a.order || 0) - (b.order || 0))
+          .map(s => byId.get(String(s.spouseId)))
+          .filter(Boolean);
+
+        // Con (khung huyết thống) — bên trái cột 2
+        nodes.push({
+          id: String(child.id), person: child, spouse: null,
+          x: col2X - NW / 2, y: currentGroupY, w: NW, h: NH,
           type: 'blood'
         });
-      } else if (father) {
-        nodes.push({ id: String(father.id), person: father, spouse: null, x: focusX - NW / 2, y: parentY, w: NW, h: NH, type: 'blood' });
-        links.push({ from: { x: focusX, y: parentY + NH }, to: { x: focusX, y: focusY }, type: 'blood' });
-      } else if (mother) {
-        nodes.push({ id: String(mother.id), person: mother, spouse: null, x: focusX - NW / 2, y: parentY, w: NW, h: NH, type: 'spouse' });
-        links.push({ from: { x: focusX, y: parentY + NH }, to: { x: focusX, y: focusY }, type: 'blood' });
-      }
-    }
 
-    // --- Tầng 3: Con ở dưới — mỗi con nối ĐÚNG cặp bố-mẹ đẻ ---
-    const childY = focusY + NH + gapY;
-    const childTotal = focusChildren.length;
-    if (childTotal) {
-      const childTotalWidth = childTotal * NW + (childTotal - 1) * gapX;
-      const childStartX = focusX - childTotalWidth / 2 + NW / 2;
-      focusChildren.forEach((c, idx) => {
-        const cX = childStartX + idx * (NW + gapX);
-        nodes.push({
-          id: String(c.id), person: c, spouse: null,
-          x: cX - NW / 2, y: childY, w: NW, h: NH, type: 'blood'
+        // Link từ mẹ (hoặc bố) xuống con
+        links.push({
+          from: { x: linkFromX, y: linkFromY },
+          to:   { x: col2X - NW / 2, y: currentGroupY + NH / 2 },
+          type: 'blood'
         });
 
-        // Tìm bố/mẹ đẻ của con này
-        const childLinks = parentChild.filter(l => String(l.child_id) === String(c.id));
-        const cFather = childLinks.find(l => l.parent_role === 'Bố');
-        const cMother = childLinks.find(l => l.parent_role === 'Mẹ');
-        const fatherNode = cFather ? nodes.find(n => n.id === String(cFather.parent_id)) : null;
-        const motherNode = cMother ? nodes.find(n => n.id === String(cMother.parent_id)) : null;
-
-        // Điểm xuất phát link: giữa cặp bố-mẹ nếu có cả 2
-        let fromX, fromY;
-        if (fatherNode && motherNode) {
-          fromX = (fatherNode.x + fatherNode.w / 2 + motherNode.x + motherNode.w / 2) / 2;
-          fromY = fatherNode.y + NH;
-        } else if (fatherNode) {
-          fromX = fatherNode.x + fatherNode.w / 2;
-          fromY = fatherNode.y + NH;
-        } else if (motherNode) {
-          fromX = motherNode.x + motherNode.w / 2;
-          fromY = motherNode.y + NH;
-        } else {
-          fromX = focusX;
-          fromY = focusY + NH;
+        // Vợ/chồng của con — bên phải con, cùng hàng
+        if (childSpouses.length > 0) {
+          const spX = col2X + NW + 20;
+          nodes.push({
+            id: String(childSpouses[0].id), person: childSpouses[0], spouse: child,
+            x: spX - NW / 2, y: currentGroupY, w: NW, h: NH, type: 'spouse'
+          });
+          // Link hôn nhân ngang
+          links.push({
+            from: { x: col2X + NW / 2, y: currentGroupY + NH / 2 },
+            to:   { x: spX - NW / 2, y: currentGroupY + NH / 2 },
+            type: 'marry'
+          });
         }
 
-        // Link chữ L từ cặp bố-mẹ xuống con
-        links.push({
-          from: { x: fromX, y: fromY },
-          to:   { x: cX, y: childY },
-          type: 'blood',
-          isFamily: true
-        });
+        currentGroupY += NH + 20;   // khoảng cách giữa các con trong cùng nhóm
       });
+      currentGroupY += groupGapY;   // khoảng cách giữa các nhóm
+    }
+ 
+    // ===== P4B: NHÓM 0 — CON KHÔNG MẸ =====
+    if (childrenNoMother.length > 0) {
+      drawChildGroup(childrenNoMother, focusX, spouseY, 'Con không mẹ');
+    }
+ 
+    // ===== P4C: NHÓM 1..N — CON THEO TỪNG VỢ =====
+    focusSpouses.forEach((wife, wifeIdx) => {
+      const wifeId = String(wife.id);
+      const wifeChildren = childrenByMother.get(wifeId) || [];
+      if (wifeChildren.length === 0) return;
+
+      // Sắp xếp: con riêng (không phải máu của focus) lên trên, rồi con chung
+      const sorted = wifeChildren.slice().sort((a, b) => {
+        const aIsStep = !isBloodChildOf(a, focus);
+        const bIsStep = !isBloodChildOf(b, focus);
+        if (aIsStep !== bIsStep) return aIsStep ? -1 : 1;
+        return sortKey(a) - sortKey(b);
+      });
+
+      // Tìm vị trí Y của vợ này
+      const wifeNode = nodes.find(n => n.id === wifeId);
+      const linkFromX = wifeNode ? wifeNode.x + wifeNode.w / 2 : focusX;
+      const linkFromY = wifeNode ? wifeNode.y + wifeNode.h : spouseY;
+
+      drawChildGroup(sorted, linkFromX, linkFromY, 'Con của ' + wife.full_name);
+    });
+
+    // Hàm phụ: kiểm tra child có phải con ruột của parent không
+    function isBloodChildOf(child, parent) {
+      const link = parentChild.find(l =>
+        String(l.child_id) === String(child.id) &&
+        String(l.parent_id) === String(parent.id)
+      );
+      return !!link;
     }
 
+    // ===== TÍNH KÍCH THƯỚC SVG =====
     const maxX = Math.max(...nodes.map(n => n.x + n.w), 400) + padding;
     const maxY = Math.max(...nodes.map(n => n.y + n.h), 300) + padding;
 
-    console.log(LOG, `familyLayout: ${nodes.length} nodes, ${links.length} links`);
+    console.log(LOG, `familyLayout: ${nodes.length} nodes, ${links.length} links, ${Math.round(maxX)}x${Math.round(maxY)}`);
     return { nodes, links, width: maxX, height: maxY };
   }
-
-     // ---------- 4) RENDER ----------
-  function render(container) {
+    // ---------- 4) RENDER ----------
+   function render(container) {
     console.log(LOG, 'render...');
     try {
       container.innerHTML = '';
