@@ -114,16 +114,24 @@
 
     const allChildren = new Set([...childToFather.keys(), ...childToMother.keys()]);
     allChildren.forEach(cid => {
-      const pid = childToFather.get(cid) || childToMother.get(cid);
-      if (!pid) return;
-      if (!childrenOf.has(pid)) childrenOf.set(pid, []);
-      childrenOf.get(pid).push(cid);
+      // Đăng ký con cho CẢ bố VÀ mẹ (dùng Set để chống lặp)
+      if (childToFather.has(cid)) {
+        const pid = childToFather.get(cid);
+        if (!childrenOf.has(pid)) childrenOf.set(pid, new Set());
+        childrenOf.get(pid).add(cid);
+      }
+      if (childToMother.has(cid)) {
+        const pid = childToMother.get(cid);
+        if (!childrenOf.has(pid)) childrenOf.set(pid, new Set());
+        childrenOf.get(pid).add(cid);
+      }
       const arr = [];
       if (childToFather.has(cid)) arr.push(childToFather.get(cid));
       if (childToMother.has(cid)) arr.push(childToMother.get(cid));
       parentsOf.set(cid, arr);
     });
-
+    // Chuyển Set → Array
+    childrenOf.forEach((set, pid) => childrenOf.set(pid, Array.from(set)));
     // spousesOf
     const spousesOf = new Map();
     marriages.forEach(m => {
@@ -444,7 +452,7 @@
 
     // Hàm vẽ 1 nhóm con: trục dọc chung → rẽ ngang vào từng con
     function drawChildGroup(children, linkFromX, linkFromY, label) {
-      const branchX = linkFromX + 60;   // điểm rẽ cách mẹ 60px
+      const branchX = col2X - 100;   // trục dọc CHUNG cho mọi nhóm
 
       // Link ngang: từ mép phải mẹ → điểm rẽ
       links.push({
