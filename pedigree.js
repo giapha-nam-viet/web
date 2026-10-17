@@ -452,12 +452,20 @@
 
     // Hàm vẽ 1 nhóm con: trục dọc chung → rẽ ngang vào từng con
     function drawChildGroup(children, linkFromX, linkFromY, label) {
-      const branchX = col2X - 100;   // trục dọc CHUNG cho mọi nhóm
+      const branchX = col2X - 100;   // trục dọc CHUNG
 
-      // Link ngang: từ mép phải mẹ → điểm rẽ
+      // Link ngang: từ mẹ → trục dọc
       links.push({
         from: { x: linkFromX, y: linkFromY },
         to:   { x: branchX, y: linkFromY },
+        type: 'blood'
+      });
+
+      // Link dọc: từ mẹ → xuống tới con cuối cùng
+      const lastChildY = currentGroupY + (children.length - 1) * (NH + 20);
+      links.push({
+        from: { x: branchX, y: linkFromY },
+        to:   { x: branchX, y: lastChildY + NH / 2 },
         type: 'blood'
       });
 
@@ -476,21 +484,14 @@
           x: childX, y: childY, w: NW, h: NH, type: 'blood'
         });
 
-        // Link dọc: từ điểm rẽ xuống ngang hàng con
-        links.push({
-          from: { x: branchX, y: linkFromY },
-          to:   { x: branchX, y: childY + NH / 2 },
-          type: 'blood'
-        });
-
-        // Link ngang: từ điểm rẽ → mép trái con
+        // Link ngang: từ trục dọc → mép trái con
         links.push({
           from: { x: branchX, y: childY + NH / 2 },
           to:   { x: childX, y: childY + NH / 2 },
           type: 'blood'
         });
 
-        // Vợ/chồng của con
+        // Vợ/chồng của con — bên phải, cùng hàng
         if (childSpouses.length > 0) {
           const spX = col2X + NW + 20;
           nodes.push({
