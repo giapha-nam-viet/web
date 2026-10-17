@@ -285,8 +285,8 @@
   }
 
 }
-  // ---------- 3.5) FAMILY LAYOUT (Lớp 2 - 2 Đời) ----------
-  function computeFamilyLayout(tree, focusId) {
+
+    function computeFamilyLayout(tree, focusId) {
     console.log(LOG, 'computeFamilyLayout for', focusId);
     const { byId, childrenOf, spousesOf } = tree;
     const NW = CFG.node.w, NH = CFG.node.h;
