@@ -285,182 +285,37 @@
   }
 
 
-  //---------- 3.5) FAMILY LAYOUT (lỚP 2 - 2 Đời) ----------
     function computeFamilyLayout(tree, focusId) {
-    console.log(LOG, 'computeFamilyLayout for', focusId);
     const { byId, childrenOf, spousesOf } = tree;
     const NW = CFG.node.w, NH = CFG.node.h;
-    const gapX = 30;       // Khoảng cách ngang
-    const gapY = 80;       // Khoảng cách dọc Bố Mẹ -> Con
-    const padding = 60;
-
+    const gap = 30;
     const focus = byId.get(String(focusId));
-    if (!focus) {
-      console.warn(LOG, 'Không tìm thấy focus:', focusId);
-      return null;
-    }
-
-    const nodes = [];
-    const links = [];
-    const drawnIds = new Set();
-
-    // 1. Lấy dữ liệu
-    const focusSpouses = (spousesOf.get(String(focusId)) || [])
-      .sort((a, b) => (a.order || 0) - (b.order || 0))
-      .map(s => byId.get(String(s.spouseId)))
-      .filter(Boolean);
-
-    const focusChildren = (childrenOf.get(String(focusId)) || [])
-      .map(cid => byId.get(String(cid)))
-      .filter(Boolean)
-      .sort((a, b) => sortKey(a) - sortKey(b));
-
-    const childrenByMother = new Map();
-    const childrenNoMother = [];
-    focusChildren.forEach(child => {
-      const childLinks = parentChild.filter(l => String(l.child_id) === String(child.id));
-      const motherLink = childLinks.find(l => l.parent_role === 'Mẹ');
-      if (motherLink) {
-        const mId = String(motherLink.parent_id);
-        if (!childrenByMother.has(mId)) childrenByMother.set(mId, []);
-        childrenByMother.get(mId).push(child);
-      } else {
-        childrenNoMother.push(child);
-      }
+    if (!focus) return null;
+    const nodes = [], links = [], seen = new Set();
+    const wives = (spousesOf.get(String(focusId)) || []).map(s => byId.get(s.spouseId)).filter(Boolean);
+    const kids = (childrenOf.get(String(focusId)) || []).map(cid => byId.get(cid)).filter(Boolean);
+    let totalW = (wives.length + 1) * NW + (wives.length) * gap;
+    let startX = 100;
+    let y1 = 100, y2 = 200, y3 = 320;
+    nodes.push({ id: focus.id, person: focus, x: startX + totalW/2 - NW/2, y: y1, w: NW, h: NH, type: 'blood' });
+    seen.add(focus.id);
+    let wx = startX;
+    wives.forEach(w => {
+      if (seen.has(w.id)) return;
+      nodes.push({ id: w.id, person: w, x: wx, y: y2, w: NW, h: NH, type: 'spouse' });
+      links.push({ from: { x: startX + totalW/2, y: y1 + NH }, to: { x: wx + NW/2, y: y2 }, type: 'blood' });
+      wx += NW + gap; seen.add(w.id);
     });
-
-    // 2. Tính toán tọa độ (Chia khối)
-    const wifeBlocks = focusSpouses.map(wife => {
-      const kids = childrenByMother.get(String(wife.id)) || [];
-      // Mỗi con chiếm 1 slot (nếu con có vợ/chồng thì chiếm 2 slots)
-      const slots = kids.reduce((sum, k) => {
-        const hasSpouse = (spousesOf.get(String(k.id)) || []).length > 0;
-        return sum + (hasSpouse ? 2 : 1);
-      }, 0);
-      const width = Math.max(1, slots) * NW + Math.max(0, slots - 1) * gapX;
-      return { wife, kids, width };
+    let kx = startX;
+    kids.forEach(k => {
+      if (seen.has(k.id)) return;
+      nodes.push({ id: k.id, person: k, x: kx, y: y3, w: NW, h: NH, type: 'blood' });
+      let mother = wives.find(w => parentChild.some(pc => pc.child_id === k.id && pc.parent_id === w.id && pc.parent_role === 'Mẹ'));
+      let sx = mother ? (nodes.find(n => n.id === mother.id).x + NW/2) : (startX + totalW/2);
+      links.push({ from: { x: sx, y: y2 + NH }, to: { x: kx + NW/2, y: y3 }, type: 'blood' });
+      kx += NW + gap; seen.add(k.id);
     });
-
-    const noMotherSlots = childrenNoMother.reduce((sum, k) => {
-      const hasSpouse = (spousesOf.get(String(k.id)) || []).length > 0;
-      return sum + (hasSpouse ? 2 : 1);
-    }, 0);
-    const noMotherBlockWidth = childrenNoMother.length > 0 
-      ? Math.max(1, noMotherSlots) * NW + Math.max(0, noMotherSlots - 1) * gapX 
-      : 0;
-
-    const totalBlocksWidth = wifeBlocks.reduce((sum, b) => sum + b.width, 0) 
-                           + (noMotherBlockWidth > 0 ? noMotherBlockWidth + gapX * 2 : 0);
-    const totalWivesWidth = focusSpouses.length * NW + (focusSpouses.length - 1) * gapX;
-    const maxWidth = Math.max(totalBlocksWidth, totalWivesWidth);
-
-    // 3. Tọa độ Y (Chiều dọc)
-    const yFather = padding;
-    const yWife = yFather + NH + 60; // Các bà vợ nằm dưới Bố
-    const yChild = yWife + NH + gapY;
-
-    // 4. Bắt đầu vẽ (Căn giữa)
-    const startX = padding + (maxWidth - totalBlocksWidth) / 2;
-    const centerX = padding + maxWidth / 2;
-
-    // 4.1 Vẽ Bố (Focus)
-    const fatherX = centerX - NW / 2;
-    nodes.push({
-      id: String(focus.id), person: focus, spouse: null,
-      x: fatherX, y: yFather, w: NW, h: NH,
-      type: isBlood(focus) ? 'blood' : 'spouse'
-    });
-    drawnIds.add(String(focus.id));
-
-    // 4.2 Vẽ các bà vợ (xếp ngang)
-    let wifeStartX = centerX - totalWivesWidth / 2;
-    const wifePositions = [];
-
-    focusSpouses.forEach(wife => {
-      const wifeId = String(wife.id);
-      if (!drawnIds.has(wifeId)) {
-        nodes.push({
-          id: wifeId, person: wife, spouse: focus,
-          x: wifeStartX, y: yWife, w: NW, h: NH, type: 'spouse'
-        });
-        drawnIds.add(wifeId);
-      }
-      
-      const wifeCx = wifeStartX + NW / 2;
-      // Đường nối từ Bố xuống Vợ
-      links.push({
-        from: { x: fatherX + NW / 2, y: yFather + NH },
-        to:   { x: wifeCx, y: yWife },
-        type: 'blood'
-      });
-
-      wifePositions.push({ id: wifeId, cx: wifeCx });
-      wifeStartX += NW + gapX;
-    });
-
-    // 4.3 Vẽ các con (chia theo cụm)
-    let currentBlockX = startX;
-
-    function drawChildren(childrenList, parentCx, startX) {
-      let currentX = startX;
-      childrenList.forEach(child => {
-        const childId = String(child.id);
-        if (drawnIds.has(childId)) return;
-
-        // Vẽ node Con
-        nodes.push({
-          id: childId, person: child, spouse: null,
-          x: currentX, y: yChild, w: NW, h: NH, type: 'blood'
-        });
-        drawnIds.add(childId);
-
-        // Link từ Bố/Mẹ xuống con (cắm thẳng dọc)
-        links.push({
-          from: { x: parentCx, y: yWife + NH },
-          to:   { x: currentX + NW / 2, y: yChild },
-          type: 'blood'
-        });
-
-        // Vẽ Vợ/Chồng của con (nếu có, xếp bên dưới)
-        const childSpouses = (spousesOf.get(childId) || [])
-          .sort((a, b) => (a.order || 0) - (b.order || 0))
-          .map(s => byId.get(String(s.spouseId)))
-          .filter(Boolean);
-
-        if (childSpouses.length > 0 && !drawnIds.has(String(childSpouses[0].id))) {
-          const sp = childSpouses[0];
-          nodes.push({
-            id: String(sp.id), person: sp, spouse: child,
-            x: currentX, y: yChild + NH + 10, w: NW, h: NH, type: 'spouse'
-          });
-          drawnIds.add(String(sp.id));
-        }
-
-        currentX += NW + gapX;
-        if (childSpouses.length > 0) currentX += NW + gapX; // Cộng slot cho vợ/chồng
-      });
-    }
-
-    // Vẽ con cho từng bà vợ
-    wifeBlocks.forEach(block => {
-      const wifePos = wifePositions.find(w => w.id === String(block.wife.id));
-      if (wifePos && block.kids.length > 0) {
-        drawChildren(block.kids, wifePos.cx, currentBlockX);
-      }
-      currentBlockX += block.width + gapX; // Dịch sang cụm tiếp theo
-    });
-
-    // Vẽ con không mẹ (Nối thẳng từ Bố)
-    if (childrenNoMother.length > 0) {
-      if (wifeBlocks.length > 0) currentBlockX += gapX; // Tách biệt
-      drawChildren(childrenNoMother, fatherX + NW / 2, currentBlockX);
-    }
-
-    const maxX = Math.max(...nodes.map(n => n.x + n.w), 400) + padding;
-    const maxY = Math.max(...nodes.map(n => n.y + n.h), 300) + padding;
-
-    console.log(LOG, `familyLayout: ${nodes.length} nodes, ${links.length} links`);
-    return { nodes, links, width: maxX, height: maxY };
+    return { nodes, links, width: kx + 100, height: 450 };
   }
   // ---------- 4) RENDER ----------
   function render(container) {
