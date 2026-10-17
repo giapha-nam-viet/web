@@ -284,8 +284,8 @@
     return { nodes, links, width: maxX, height: maxY };
   }
 
-}
 
+  //---------- 3.5) FAMILY LAYOUT (lỚP 2 - 2 Đời) ----------
     function computeFamilyLayout(tree, focusId) {
     console.log(LOG, 'computeFamilyLayout for', focusId);
     const { byId, childrenOf, spousesOf } = tree;
