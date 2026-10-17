@@ -284,13 +284,14 @@
     return { nodes, links, width: maxX, height: maxY };
   }
 
-  // ---------- 3.5) FAMILY LAYOUT (Lớp 2) ----------
+}
+  // ---------- 3.5) FAMILY LAYOUT (Lớp 2 - 2 Đời) ----------
   function computeFamilyLayout(tree, focusId) {
     console.log(LOG, 'computeFamilyLayout for', focusId);
     const { byId, childrenOf, spousesOf } = tree;
     const NW = CFG.node.w, NH = CFG.node.h;
-    const gapX = 30;
-    const gapY = 100;
+    const gapX = 30;       // Khoảng cách ngang
+    const gapY = 80;       // Khoảng cách dọc Bố Mẹ -> Con
     const padding = 60;
 
     const focus = byId.get(String(focusId));
@@ -303,6 +304,7 @@
     const links = [];
     const drawnIds = new Set();
 
+    // 1. Lấy dữ liệu
     const focusSpouses = (spousesOf.get(String(focusId)) || [])
       .sort((a, b) => (a.order || 0) - (b.order || 0))
       .map(s => byId.get(String(s.spouseId)))
@@ -327,13 +329,15 @@
       }
     });
 
+    // 2. Tính toán tọa độ (Chia khối)
     const wifeBlocks = focusSpouses.map(wife => {
       const kids = childrenByMother.get(String(wife.id)) || [];
-      const kidSlots = kids.reduce((sum, k) => {
+      // Mỗi con chiếm 1 slot (nếu con có vợ/chồng thì chiếm 2 slots)
+      const slots = kids.reduce((sum, k) => {
         const hasSpouse = (spousesOf.get(String(k.id)) || []).length > 0;
         return sum + (hasSpouse ? 2 : 1);
       }, 0);
-      const width = Math.max(1, kidSlots) * NW + Math.max(0, kidSlots - 1) * gapX;
+      const width = Math.max(1, slots) * NW + Math.max(0, slots - 1) * gapX;
       return { wife, kids, width };
     });
 
@@ -350,13 +354,17 @@
     const totalWivesWidth = focusSpouses.length * NW + (focusSpouses.length - 1) * gapX;
     const maxWidth = Math.max(totalBlocksWidth, totalWivesWidth);
 
+    // 3. Tọa độ Y (Chiều dọc)
     const yFather = padding;
-    const yWife = yFather + NH + gapY;
+    const yWife = yFather + NH + 60; // Các bà vợ nằm dưới Bố
     const yChild = yWife + NH + gapY;
-    const startX = padding + (maxWidth - totalBlocksWidth) / 2;
 
-    // 1. Vẽ Bố (Focus)
-    const fatherX = padding + maxWidth / 2 - NW / 2;
+    // 4. Bắt đầu vẽ (Căn giữa)
+    const startX = padding + (maxWidth - totalBlocksWidth) / 2;
+    const centerX = padding + maxWidth / 2;
+
+    // 4.1 Vẽ Bố (Focus)
+    const fatherX = centerX - NW / 2;
     nodes.push({
       id: String(focus.id), person: focus, spouse: null,
       x: fatherX, y: yFather, w: NW, h: NH,
@@ -364,8 +372,8 @@
     });
     drawnIds.add(String(focus.id));
 
-    // 2. Vẽ các bà vợ
-    let wifeStartX = fatherX + NW / 2 - totalWivesWidth / 2;
+    // 4.2 Vẽ các bà vợ (xếp ngang)
+    let wifeStartX = centerX - totalWivesWidth / 2;
     const wifePositions = [];
 
     focusSpouses.forEach(wife => {
@@ -379,42 +387,41 @@
       }
       
       const wifeCx = wifeStartX + NW / 2;
-      const fatherCx = fatherX + NW / 2;
+      // Đường nối từ Bố xuống Vợ
       links.push({
-        from: { x: fatherCx, y: yFather + NH },
+        from: { x: fatherX + NW / 2, y: yFather + NH },
         to:   { x: wifeCx, y: yWife },
-        type: 'blood',
-        isFamily: true
+        type: 'blood'
       });
 
-      wifePositions.push({ wifeId, x: wifeStartX, cx: wifeCx });
+      wifePositions.push({ id: wifeId, cx: wifeCx });
       wifeStartX += NW + gapX;
     });
 
-    // 3. Vẽ các con
+    // 4.3 Vẽ các con (chia theo cụm)
     let currentBlockX = startX;
-    let currentY = yChild;
 
-    function drawChildren(childrenList, parentCx, parentY) {
-      let currentX = currentBlockX;
+    function drawChildren(childrenList, parentCx, startX) {
+      let currentX = startX;
       childrenList.forEach(child => {
         const childId = String(child.id);
         if (drawnIds.has(childId)) return;
 
+        // Vẽ node Con
         nodes.push({
           id: childId, person: child, spouse: null,
-          x: currentX, y: currentY, w: NW, h: NH, type: 'blood'
+          x: currentX, y: yChild, w: NW, h: NH, type: 'blood'
         });
         drawnIds.add(childId);
 
-        const childCx = currentX + NW / 2;
+        // Link từ Bố/Mẹ xuống con (cắm thẳng dọc)
         links.push({
-          from: { x: parentCx, y: parentY + NH },
-          to:   { x: childCx, y: currentY },
-          type: 'blood',
-          isFamily: true
+          from: { x: parentCx, y: yWife + NH },
+          to:   { x: currentX + NW / 2, y: yChild },
+          type: 'blood'
         });
 
+        // Vẽ Vợ/Chồng của con (nếu có, xếp bên dưới)
         const childSpouses = (spousesOf.get(childId) || [])
           .sort((a, b) => (a.order || 0) - (b.order || 0))
           .map(s => byId.get(String(s.spouseId)))
@@ -422,35 +429,31 @@
 
         if (childSpouses.length > 0 && !drawnIds.has(String(childSpouses[0].id))) {
           const sp = childSpouses[0];
-          const spX = currentX + NW + gapX;
           nodes.push({
             id: String(sp.id), person: sp, spouse: child,
-            x: spX, y: currentY, w: NW, h: NH, type: 'spouse'
-          });
-          links.push({
-            from: { x: currentX + NW, y: currentY + NH / 2 },
-            to:   { x: spX, y: currentY + NH / 2 },
-            type: 'marry'
+            x: currentX, y: yChild + NH + 10, w: NW, h: NH, type: 'spouse'
           });
           drawnIds.add(String(sp.id));
-          currentX += NW + gapX;
         }
 
         currentX += NW + gapX;
+        if (childSpouses.length > 0) currentX += NW + gapX; // Cộng slot cho vợ/chồng
       });
-      currentBlockX = currentX + gapX;
     }
 
+    // Vẽ con cho từng bà vợ
     wifeBlocks.forEach(block => {
-      const wifePos = wifePositions.find(w => w.wifeId === String(block.wife.id));
+      const wifePos = wifePositions.find(w => w.id === String(block.wife.id));
       if (wifePos && block.kids.length > 0) {
-        drawChildren(block.kids, wifePos.cx, yWife);
+        drawChildren(block.kids, wifePos.cx, currentBlockX);
       }
+      currentBlockX += block.width + gapX; // Dịch sang cụm tiếp theo
     });
 
+    // Vẽ con không mẹ (Nối thẳng từ Bố)
     if (childrenNoMother.length > 0) {
-      if (wifeBlocks.length > 0) currentBlockX += gapX;
-      drawChildren(childrenNoMother, fatherX + NW / 2, yFather);
+      if (wifeBlocks.length > 0) currentBlockX += gapX; // Tách biệt
+      drawChildren(childrenNoMother, fatherX + NW / 2, currentBlockX);
     }
 
     const maxX = Math.max(...nodes.map(n => n.x + n.w), 400) + padding;
@@ -459,7 +462,6 @@
     console.log(LOG, `familyLayout: ${nodes.length} nodes, ${links.length} links`);
     return { nodes, links, width: maxX, height: maxY };
   }
-
   // ---------- 4) RENDER ----------
   function render(container) {
     console.log(LOG, 'render...');
