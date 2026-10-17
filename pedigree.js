@@ -1,5 +1,5 @@
 /* ============================================================
-   pedigree.js v6.1 — Layout kiểu A (con nằm dưới cha)
+   pedigree.js v6.2 — Layout kiểu A (con nằm dưới cha)
    - Đệ quy post-order: mỗi cây con có không gian riêng
    - Cha đặt ở tâm các con
    - Cháu nằm dưới con (đệ quy tự nhiên)
@@ -9,7 +9,7 @@
 (function () {
   'use strict';
   const LOG = '[Pedigree]';
-  console.log(LOG, '⭐ v6.1 loaded — Layout kiểu A');
+  console.log(LOG, '⭐ v6.2 loaded — Layout kiểu A');
 
   // ---------- CONFIG ----------
   const CFG = {
@@ -99,7 +99,6 @@
     console.log(LOG, 'buildTree...');
     const byId = new Map(persons.map(p => [String(p.id), p]));
 
-    // childrenOf: parentId → [childId]
     const childrenOf = new Map();
     const parentsOf = new Map();
     const childToFather = new Map();
@@ -114,7 +113,6 @@
 
     const allChildren = new Set([...childToFather.keys(), ...childToMother.keys()]);
     allChildren.forEach(cid => {
-      // Đăng ký con cho CẢ bố VÀ mẹ (dùng Set để chống lặp)
       if (childToFather.has(cid)) {
         const pid = childToFather.get(cid);
         if (!childrenOf.has(pid)) childrenOf.set(pid, new Set());
@@ -132,7 +130,7 @@
     });
     // Chuyển Set → Array
     childrenOf.forEach((set, pid) => childrenOf.set(pid, Array.from(set)));
-    // spousesOf
+
     const spousesOf = new Map();
     marriages.forEach(m => {
       const h = String(m.husband_id), w = String(m.wife_id);
@@ -152,7 +150,6 @@
     const rootPersons = rootsAll.filter(p => (p.generation || 0) === minGen && isBlood(p));
     if (!rootPersons.length) rootPersons.push(rootsAll[0]);
 
-    // Chi (chỉ để filter dropdown)
     const branchSet = new Set();
     persons.forEach(p => { if (p.branch && p.branch.trim()) branchSet.add(p.branch.trim()); });
     const branches = Array.from(branchSet).sort();
@@ -161,7 +158,7 @@
     return { byId, childrenOf, parentsOf, spousesOf, roots: rootPersons, branches, minGen };
   }
 
-  // ---------- 3) COMPUTE LAYOUT (kiểu A: con nằm dưới cha) ----------
+  // ---------- 3) COMPUTE LAYOUT (Toàn cảnh) ----------
   function computeLayout(tree) {
     console.log(LOG, 'computeLayout v6.1...');
     const { byId, childrenOf, spousesOf, roots } = tree;
@@ -170,8 +167,6 @@
 
     const nodes = [];
     const links = [];
-
-    // Bước 1: Xây cây con (đệ quy) — mỗi subtree có width/height riêng
     const treeCache = new Map();
 
     function buildSubtree(person, depth) {
@@ -179,16 +174,13 @@
       const pid = String(person.id);
       if (treeCache.has(pid)) return treeCache.get(pid);
 
-      // Vợ/chồng
       const spouses = (spousesOf.get(pid) || [])
         .sort((a, b) => (a.order || 0) - (b.order || 0))
         .map(s => byId.get(s.spouseId))
         .filter(Boolean);
 
-      // Khối hôn nhân: cha + n vợ
       const blockH = NH + spouses.length * (NH + spouseGap);
 
-      // Con (đệ quy)
       const childIds = (childrenOf.get(pid) || [])
         .map(cid => byId.get(cid))
         .filter(Boolean)
@@ -200,12 +192,10 @@
         if (sub) childSubtrees.push(sub);
       }
 
-      // Tính width cây con
       let totalChildWidth = 0;
       childSubtrees.forEach(sub => { totalChildWidth += sub.width + CFG.gapX; });
       const ownWidth = Math.max(NW, totalChildWidth - CFG.gapX);
 
-      // Tính offset cho từng con (so với tâm cha)
       let cursorX = 0;
       childSubtrees.forEach(sub => {
         sub.offsetX = cursorX + sub.width / 2 - ownWidth / 2;
@@ -217,19 +207,13 @@
         : 0);
 
       const info = {
-        person, pid,
-        spouses,
-        width: ownWidth,
-        blockH,
-        height,
-        children: childSubtrees,
-        childY: blockH + CFG.gapY
+        person, pid, spouses, width: ownWidth, blockH, height,
+        children: childSubtrees, childY: blockH + CFG.gapY
       };
       treeCache.set(pid, info);
       return info;
     }
 
-    // Bước 2: Ghi nodes + links với offset tuyệt đối
     const placed = new Set();
 
     function emit(subtree, absX, absY) {
@@ -247,7 +231,6 @@
         type: isBlood(person) ? 'blood' : 'spouse'
       });
 
-      // Vợ/chồng xếp dọc dưới cha
       let spY = nodeY + NH + spouseGap;
       spouses.forEach(sp => {
         const spId = String(sp.id);
@@ -265,7 +248,6 @@
         spY += NH + spouseGap;
       });
 
-      // Con
       children.forEach(sub => {
         const childX = absX + sub.offsetX;
         const childYAbs = absY + childY;
@@ -278,7 +260,6 @@
       });
     }
 
-    // Đặt từng cụ tổ, căn giữa
     const rootSubtrees = [];
     let totalRootWidth = 0;
     roots.forEach(r => {
@@ -322,7 +303,6 @@
     const links = [];
     const drawnIds = new Set();
 
-    // Lấy dữ liệu
     const focusSpouses = (spousesOf.get(String(focusId)) || [])
       .sort((a, b) => (a.order || 0) - (b.order || 0))
       .map(s => byId.get(String(s.spouseId)))
@@ -333,7 +313,6 @@
       .filter(Boolean)
       .sort((a, b) => sortKey(a) - sortKey(b));
 
-    // Phân nhóm con theo mẹ
     const childrenByMother = new Map();
     const childrenNoMother = [];
     focusChildren.forEach(child => {
@@ -348,11 +327,8 @@
       }
     });
 
-    // Xác định bề rộng của từng cụm (Vợ + Các con của vợ)
-    // Mỗi cụm rộng tối thiểu bằng 1 node, nếu có nhiều con thì rộng hơn.
     const wifeBlocks = focusSpouses.map(wife => {
       const kids = childrenByMother.get(String(wife.id)) || [];
-      // Mỗi con chiếm 1 slot (bao gồm cả vợ/chồng của con nếu có)
       const kidSlots = kids.reduce((sum, k) => {
         const hasSpouse = (spousesOf.get(String(k.id)) || []).length > 0;
         return sum + (hasSpouse ? 2 : 1);
@@ -361,7 +337,6 @@
       return { wife, kids, width };
     });
 
-    // Cụm "Con không mẹ"
     const noMotherSlots = childrenNoMother.reduce((sum, k) => {
       const hasSpouse = (spousesOf.get(String(k.id)) || []).length > 0;
       return sum + (hasSpouse ? 2 : 1);
@@ -370,22 +345,17 @@
       ? Math.max(1, noMotherSlots) * NW + Math.max(0, noMotherSlots - 1) * gapX 
       : 0;
 
-    // Tổng bề rộng của tất cả các cụm
     const totalBlocksWidth = wifeBlocks.reduce((sum, b) => sum + b.width, 0) 
                            + (noMotherBlockWidth > 0 ? noMotherBlockWidth + gapX * 2 : 0);
     const totalWivesWidth = focusSpouses.length * NW + (focusSpouses.length - 1) * gapX;
     const maxWidth = Math.max(totalBlocksWidth, totalWivesWidth);
 
-    // Tọa độ Y
     const yFather = padding;
     const yWife = yFather + NH + gapY;
     const yChild = yWife + NH + gapY;
-
-    // Tọa độ X bắt đầu
     const startX = padding + (maxWidth - totalBlocksWidth) / 2;
 
-    // ===== 1. VẼ BỐ (FOCUS) =====
-    // Bố luôn nằm ở giữa tổng bề rộng
+    // 1. Vẽ Bố (Focus)
     const fatherX = padding + maxWidth / 2 - NW / 2;
     nodes.push({
       id: String(focus.id), person: focus, spouse: null,
@@ -394,8 +364,7 @@
     });
     drawnIds.add(String(focus.id));
 
-    // ===== 2. VẼ CÁC BÀ VỢ =====
-    // Vợ được căn giữa so với Bố
+    // 2. Vẽ các bà vợ
     let wifeStartX = fatherX + NW / 2 - totalWivesWidth / 2;
     const wifePositions = [];
 
@@ -409,50 +378,43 @@
         drawnIds.add(wifeId);
       }
       
-      // Link từ Bố xuống Vợ (đường gấp khúc)
       const wifeCx = wifeStartX + NW / 2;
       const fatherCx = fatherX + NW / 2;
       links.push({
         from: { x: fatherCx, y: yFather + NH },
         to:   { x: wifeCx, y: yWife },
         type: 'blood',
-        isFamily: true // Dùng để vẽ đường gấp khúc
+        isFamily: true
       });
 
       wifePositions.push({ wifeId, x: wifeStartX, cx: wifeCx });
       wifeStartX += NW + gapX;
     });
 
-    // ===== 3. VẼ CÁC CON THEO TỪNG CỤM =====
+    // 3. Vẽ các con
     let currentBlockX = startX;
+    let currentY = yChild;
 
-    // Hàm vẽ danh sách con
-    function drawChildren(childrenList, parentCx, parentY, startX, width) {
-      let currentX = startX;
+    function drawChildren(childrenList, parentCx, parentY) {
+      let currentX = currentBlockX;
       childrenList.forEach(child => {
         const childId = String(child.id);
-        if (drawnIds.has(childId)) {
-           currentX += NW + gapX;
-           return;
-        }
+        if (drawnIds.has(childId)) return;
 
-        // Vẽ node Con
         nodes.push({
           id: childId, person: child, spouse: null,
-          x: currentX, y: yChild, w: NW, h: NH, type: 'blood'
+          x: currentX, y: currentY, w: NW, h: NH, type: 'blood'
         });
         drawnIds.add(childId);
 
-        // Link từ Cha/Mẹ xuống con
         const childCx = currentX + NW / 2;
         links.push({
           from: { x: parentCx, y: parentY + NH },
-          to:   { x: childCx, y: yChild },
+          to:   { x: childCx, y: currentY },
           type: 'blood',
           isFamily: true
         });
 
-        // Vẽ Vợ/Chồng của con (nếu có, và chưa được vẽ)
         const childSpouses = (spousesOf.get(childId) || [])
           .sort((a, b) => (a.order || 0) - (b.order || 0))
           .map(s => byId.get(String(s.spouseId)))
@@ -463,45 +425,43 @@
           const spX = currentX + NW + gapX;
           nodes.push({
             id: String(sp.id), person: sp, spouse: child,
-            x: spX, y: yChild, w: NW, h: NH, type: 'spouse'
+            x: spX, y: currentY, w: NW, h: NH, type: 'spouse'
           });
           links.push({
-            from: { x: currentX + NW, y: yChild + NH / 2 },
-            to:   { x: spX, y: yChild + NH / 2 },
+            from: { x: currentX + NW, y: currentY + NH / 2 },
+            to:   { x: spX, y: currentY + NH / 2 },
             type: 'marry'
           });
           drawnIds.add(String(sp.id));
-          currentX += NW + gapX; // Dịch thêm 1 slot cho vợ/chồng
+          currentX += NW + gapX;
         }
 
         currentX += NW + gapX;
       });
+      currentBlockX = currentX + gapX;
     }
 
-    // Vẽ các cụm con của từng bà vợ
     wifeBlocks.forEach(block => {
       const wifePos = wifePositions.find(w => w.wifeId === String(block.wife.id));
       if (wifePos && block.kids.length > 0) {
-        drawChildren(block.kids, wifePos.cx, yWife, currentBlockX, block.width);
+        drawChildren(block.kids, wifePos.cx, yWife);
       }
-      currentBlockX += block.width + gapX; // Khoảng cách giữa các cụm
     });
 
-    // Vẽ cụm con không mẹ (ngoài cùng bên phải)
     if (childrenNoMother.length > 0) {
-      if (wifeBlocks.length > 0) currentBlockX += gapX; // Tách biệt hẳn ra
-      drawChildren(childrenNoMother, fatherX + NW / 2, yFather, currentBlockX, noMotherBlockWidth);
+      if (wifeBlocks.length > 0) currentBlockX += gapX;
+      drawChildren(childrenNoMother, fatherX + NW / 2, yFather);
     }
 
-    // ===== TÍNH KÍCH THƯỚC TỔNG =====
     const maxX = Math.max(...nodes.map(n => n.x + n.w), 400) + padding;
     const maxY = Math.max(...nodes.map(n => n.y + n.h), 300) + padding;
 
     console.log(LOG, `familyLayout: ${nodes.length} nodes, ${links.length} links`);
     return { nodes, links, width: maxX, height: maxY };
   }
-    // ---------- 4) RENDER ----------
-   function render(container) {
+
+  // ---------- 4) RENDER ----------
+  function render(container) {
     console.log(LOG, 'render...');
     try {
       container.innerHTML = '';
@@ -529,12 +489,12 @@
 
       // Links
       const linkG = gRoot.append('g').attr('class', 'links');
+      linkG.selectAll('path').data(links).enter().append('path')
         .attr('d', d => {
           if (d.type === 'marry') {
-            // Link hôn nhân nằm ngang
             return `M${d.from.x},${d.from.y} L${d.to.x},${d.to.y}`;
           }
-          // Link huyết thống: Đi xuống 1 đoạn, sau đó rẽ ngang tới đích, rồi đi xuống
+          // Link huyết thống: Đi xuống 1 đoạn, rồi rẽ ngang tới đích, rồi đi xuống
           const midY = d.from.y + (d.to.y - d.from.y) * 0.6;
           return `M${d.from.x},${d.from.y} V${midY} H${d.to.x} V${d.to.y}`;
         })
@@ -553,24 +513,23 @@
         .style('cursor', 'pointer')
         .style('opacity', d => isFaded(d.person) ? 0.55 : 1)
        .on('click', (evt, d) => {
-  evt.stopPropagation();
-  console.log('[Pedigree] click → panel:', d.person.full_name);
-  // Nếu đang ở chế độ Lớp 2 → focus gia đình người này
-  if (viewMode === 'family') {
-    familyFocusId = String(d.person.id);
-    const container = document.getElementById('pha-do-svg');
-    if (container) render(container);
-    console.log('[Pedigree] → Focus family:', d.person.full_name);
-  }
-  if (window.PedigreePanel) window.PedigreePanel.show(d.person);
-})
-.on('dblclick', (evt, d) => {
-  evt.stopPropagation();
-  console.log('[Pedigree] dblclick → modal:', d.person.full_name);
-  if (typeof window.openPersonForm === 'function') {
-    window.openPersonForm(d.person.id);
-  }
-});
+          evt.stopPropagation();
+          console.log('[Pedigree] click → panel:', d.person.full_name);
+          if (viewMode === 'family') {
+            familyFocusId = String(d.person.id);
+            const container = document.getElementById('pha-do-svg');
+            if (container) render(container);
+            console.log('[Pedigree] → Focus family:', d.person.full_name);
+          }
+          if (window.PedigreePanel) window.PedigreePanel.show(d.person);
+        })
+        .on('dblclick', (evt, d) => {
+          evt.stopPropagation();
+          console.log('[Pedigree] dblclick → modal:', d.person.full_name);
+          if (typeof window.openPersonForm === 'function') {
+            window.openPersonForm(d.person.id);
+          }
+        });
 
       node.append('rect')
         .attr('width', d => d.w).attr('height', d => d.h)
@@ -655,13 +614,12 @@
       viewMode = 'family';
       btnFam.classList.add('is-active');
       btnAll.classList.remove('is-active');
-    if (!familyFocusId) {
-  // Ưu tiên Phạm Văn Mỹ (Đời 2), fallback về cụ tổ
-     const preferred = persons.find(p => (p.full_name || '').trim() === 'Phạm Văn Mỹ');
-     const fallback = (tree && tree.roots && tree.roots[0]) || null;
-     const target = preferred || fallback;
-     if (target) familyFocusId = String(target.id);
-   }
+      if (!familyFocusId) {
+        const preferred = persons.find(p => (p.full_name || '').trim() === 'Phạm Văn Mỹ');
+        const fallback = (tree && tree.roots && tree.roots[0]) || null;
+        const target = preferred || fallback;
+        if (target) familyFocusId = String(target.id);
+      }
       const container = document.getElementById('pha-do-svg');
       if (container) render(container);
       console.log(LOG, '→ Chế độ Lớp 2, focus:', familyFocusId);
@@ -685,7 +643,6 @@
           const sel = d3.select(this);
           const d = sel.datum();
           sel.style('opacity', isFaded(d.person) ? 0.55 : 1);
-          // Restore màu gốc
           const isSp = sel.classed('node-spouse');
           sel.select('rect')
             .attr('stroke', isSp ? CFG.colors.spouse.stroke : CFG.colors.blood.stroke)
@@ -703,14 +660,11 @@
         const match = name.includes(qNorm);
         const sel = d3.select(this);
         sel.style('opacity', match ? 1 : 0.15);
-        // ⭐ Thêm/ bỏ glow vàng cho node khớp
         const rect = sel.select('rect');
         if (match) {
           rect.attr('stroke', '#F2C94C').attr('stroke-width', 3.5);
-          // Xoá filter cũ (nếu có) rồi add mới
           rect.attr('filter', 'url(#focus-glow)');
         } else {
-          // Restore màu gốc tuỳ loại node
           const isSp = sel.classed('node-spouse');
           rect.attr('stroke', isSp ? CFG.colors.spouse.stroke : CFG.colors.blood.stroke);
           rect.attr('stroke-width', isSp ? 1.5 : 2.5);
@@ -727,7 +681,7 @@
         const svgH = svg.node().clientHeight || 600;
         const tx = svgW / 2 - centerX * k;
         const ty = svgH / 2 - centerY * k;
-svg.transition().duration(800).ease(d3.easeCubicOut).call(
+        svg.transition().duration(800).ease(d3.easeCubicOut).call(
           zoomBehavior.transform,
           d3.zoomIdentity.translate(tx, ty).scale(k)
         );
@@ -824,7 +778,7 @@ svg.transition().duration(800).ease(d3.easeCubicOut).call(
     }
   }
 };
-  console.log(LOG, '✓ v6.1 Exports:', {
+  console.log(LOG, '✓ v6.2 Exports:', {
     init: typeof init,
     render: typeof render,
     buildTree: typeof buildTree,
