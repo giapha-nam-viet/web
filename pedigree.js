@@ -701,9 +701,13 @@
       viewMode = 'family';
       btnFam.classList.add('is-active');
       btnAll.classList.remove('is-active');
-      if (!familyFocusId && tree && tree.roots && tree.roots[0]) {
-        familyFocusId = String(tree.roots[0].id);
-      }
+    if (!familyFocusId) {
+  // Ưu tiên Phạm Văn Mỹ (Đời 2), fallback về cụ tổ
+     const preferred = persons.find(p => (p.full_name || '').trim() === 'Phạm Văn Mỹ');
+     const fallback = (tree && tree.roots && tree.roots[0]) || null;
+     const target = preferred || fallback;
+     if (target) familyFocusId = String(target.id);
+   }
       const container = document.getElementById('pha-do-svg');
       if (container) render(container);
       console.log(LOG, '→ Chế độ Lớp 2, focus:', familyFocusId);
