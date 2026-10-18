@@ -1,21 +1,21 @@
 /* ============================================================
-   pedigree.js v9.0 — Bản sửa lỗi tuyệt đối (Layout A)
-   - Sửa lỗi vị trí và màu sắc của Vợ/Chồng (Trần Thị Mai).
-   - Sắp xếp con chuẩn: Con trưởng trái, Con nuôi/Ngoài giá thú phải.
-   - Lớp 2: Bỏ đường nối giữa các bà vợ. Bỏ đường nối của con riêng & con nuôi.
+   pedigree.js v9.1 — Bản gia cố thuật toán gom cụm và sắp xếp
+   - Sửa lỗi rời rạc khi Database thiếu dữ liệu Hôn nhân.
+   - Tự động gom Vợ/Chồng dựa trên Con chung nếu thiếu bảng marriages.
+   - Tăng khoảng cách thế hệ để phả đồ thoáng đãng hơn.
    ============================================================ */
 (function () {
   'use strict';
   const LOG = '[Pedigree]';
-  console.log(LOG, '⭐ v9.0 loaded — Bản sửa lỗi tuyệt đối');
+  console.log(LOG, '⭐ v9.1 loaded — Bản gia cố thuật toán');
 
   // ---------- CONFIG ----------
   const CFG = {
-    node:      { w: 180, h: 56 },
+    node:      { w: 180, h: 60 }, // Tăng nhẹ chiều cao cho thoáng
     gapX:      40,
-    gapY:      90,
+    gapY:      110, // Tăng khoảng cách thế hệ
     padding:   60,
-    spouseGap: 10,
+    spouseGap: 12,
     colors: {
       blood:  { stroke: '#88a9ad', fill: '#F5FAFA' }, // Xanh đậm cho huyết thống
       spouse: { stroke: '#b4c8ca', fill: '#F8FBFB' }, // Xanh nhạt cho vợ/chồng/con riêng
@@ -99,7 +99,7 @@
     const childToMother = new Map();
     const spousesOf = new Map();
 
-    // 1. Xử lý hôn nhân (Marriages)
+    // 1. Xử lý hôn nhân (Marriages) - Gốc rễ
     marriages.forEach(m => {
       const h = String(m.husband_id), w = String(m.wife_id);
       const ord = m.marriage_order || 0;
@@ -137,7 +137,35 @@
     });
     childrenOf.forEach((set, pid) => childrenOf.set(pid, Array.from(set)));
 
-    // 3. Tìm Cụ tổ
+    // 3. GIA CỐ: Tự động gom vợ/chồng nếu bảng marriages bị thiếu
+    persons.forEach(p => {
+      const pid = String(p.id);
+      if (!childrenOf.has(pid)) return;
+      
+      const kids = childrenOf.get(pid).map(cid => byId.get(cid)).filter(Boolean);
+      kids.forEach(k => {
+        const kidId = String(k.id);
+        // Nếu đứa con này có Mẹ, mà cha hiện tại chưa được nối hôn nhân với mẹ đó
+        if (childToMother.has(kidId)) {
+          const momId = childToMother.get(kidId);
+          if (momId !== pid) {
+             const currentSpouses = spousesOf.get(pid) || [];
+             if (!currentSpouses.some(s => s.spouseId === momId)) {
+               currentSpouses.push({ spouseId: momId, order: 99 }); // Tự động gán
+               spousesOf.set(pid, currentSpouses);
+               // Nối ngược lại cho mẹ
+               const momSpouses = spousesOf.get(momId) || [];
+               if (!momSpouses.some(s => s.spouseId === pid)) {
+                 momSpouses.push({ spouseId: pid, order: 99 });
+                 spousesOf.set(momId, momSpouses);
+               }
+             }
+          }
+        }
+      });
+    });
+
+    // 4. Tìm Cụ tổ
     const rootsAll = persons.filter(p => !parentsOf.has(String(p.id)));
     rootsAll.sort((a, b) => (a.generation || 0) - (b.generation || 0));
     if (!rootsAll.length) return null;
@@ -154,7 +182,7 @@
 
   // ---------- 3) COMPUTE LAYOUT (Toàn cảnh) ----------
   function computeLayout(tree) {
-    console.log(LOG, 'computeLayout v9.0...');
+    console.log(LOG, 'computeLayout v9.1...');
     const { byId, childrenOf, spousesOf, roots } = tree;
     const NW = CFG.node.w, NH = CFG.node.h;
     const spouseGap = CFG.spouseGap;
@@ -168,10 +196,22 @@
       const pid = String(person.id);
       if (treeCache.has(pid)) return treeCache.get(pid);
 
-      const spouses = (spousesOf.get(pid) || [])
+      // Lấy danh sách vợ/chồng
+      let spouses = (spousesOf.get(pid) || [])
         .sort((a, b) => (a.order || 0) - (b.order || 0))
         .map(s => byId.get(s.spouseId))
         .filter(Boolean);
+
+      // GIA CỐ: Nếu có vợ/chồng bị trùng lặp trong DB, loại bỏ trùng
+      const uniqueSpouses = [];
+      const seenSpIds = new Set();
+      spouses.forEach(sp => {
+        if (!seenSpIds.has(sp.id)) {
+          uniqueSpouses.push(sp);
+          seenSpIds.add(sp.id);
+        }
+      });
+      spouses = uniqueSpouses;
 
       const blockH = NH + spouses.length * (NH + spouseGap);
 
@@ -180,24 +220,12 @@
         .map(cid => byId.get(cid))
         .filter(Boolean)
         .sort((a, b) => {
-          // Ưu tiên 1: Con ruột (0) xếp trước, Con nuôi/Ngoài giá thú (1) xếp sau
           const isSpecialA = (a.special_status === 'Con nuôi' || a.special_status === 'Con ngoài giá thú') ? 1 : 0;
           const isSpecialB = (b.special_status === 'Con nuôi' || b.special_status === 'Con ngoài giá thú') ? 1 : 0;
           if (isSpecialA !== isSpecialB) return isSpecialA - isSpecialB;
           
-          // Ưu tiên 2: Thứ tự sinh
-          let orderA = a.birth_order || a.sibling_order;
-          let orderB = b.birth_order || b.sibling_order;
-          
-          // Fallback: Nếu DB trống, dùng năm sinh để sắp xếp (ai sinh trước xếp trước)
-          if (orderA === undefined || orderA === null) {
-            orderA = a.birth_year || 9999;
-            if (b.birth_year && orderA === 9999) orderA = b.birth_year + 1; 
-          }
-          if (orderB === undefined || orderB === null) {
-            orderB = b.birth_year || 9999;
-            if (a.birth_year && orderB === 9999) orderB = a.birth_year + 1;
-          }
+          let orderA = a.birth_order || a.sibling_order || a.birth_year || 9999;
+          let orderB = b.birth_order || b.sibling_order || b.birth_year || 9999;
           
           if (orderA !== orderB) return orderA - orderB;
           return (a.full_name || '').localeCompare(b.full_name || '');
@@ -242,15 +270,14 @@
       const nodeX = absX - NW / 2;
       const nodeY = absY;
 
-      // Người chính (Nếu là Vợ/Chồng thì màu nhạt, ngược lại màu đậm)
-      const isFocusSpouse = person.role_type === 'Vợ' || person.role_type === 'Chồng' || person.gender === 'Nữ' && !childrenOf.has(pid);
+      // Người chính
       nodes.push({
         id: pid, person, spouse: null,
         x: nodeX, y: nodeY, w: NW, h: NH,
-        type: isFocusSpouse ? 'spouse' : 'blood'
+        type: 'blood'
       });
 
-      // Vẽ vợ/chồng (Luôn màu nhạt, xếp dọc bên dưới)
+      // Vẽ vợ/chồng xếp dọc dưới người chính
       let spY = nodeY + NH + spouseGap;
       spouses.forEach(sp => {
         const spId = String(sp.id);
@@ -306,7 +333,7 @@
 
   // ---------- 3.5) FAMILY LAYOUT (Lớp 2) ----------
   function computeFamilyLayout(tree, focusId) {
-    console.log(LOG, 'computeFamilyLayout v9.0 (Lớp 2)...');
+    console.log(LOG, 'computeFamilyLayout v9.1 (Lớp 2)...');
     const { byId, childrenOf, spousesOf } = tree;
     const NW = CFG.node.w, NH = CFG.node.h;
     const focus = byId.get(String(focusId));
@@ -317,46 +344,42 @@
       .sort((a,b) => (a.order||0) - (b.order||0))
       .map(s => byId.get(s.spouseId)).filter(Boolean);
     
-    // Lấy tất cả các con của Focus
     const allFocusKids = (childrenOf.get(String(focusId)) || [])
       .map(cid => byId.get(cid)).filter(Boolean)
       .sort((a, b) => {
-        let orderA = a.birth_order || a.sibling_order || 999;
-        let orderB = b.birth_order || b.sibling_order || 999;
+        let orderA = a.birth_order || a.sibling_order || a.birth_year || 999;
+        let orderB = b.birth_order || b.sibling_order || b.birth_year || 999;
         return orderA - orderB;
       });
 
-    // --- CẤU HÌNH KHOẢNG CÁCH LỚP 2 (FILE 888) ---
-    const gapWife = NW / 2;            // Khoảng cách giữa các bà vợ = 1/2 khung tên
+    const gapWife = NW / 2;            
     const yFather = 100;               
-    const yWife = yFather + NH * 2;    // Bố -> Vợ: Rộng rãi (2 lần chiều cao)
-    const yChild = yWife + NH * 2.5;   // Mẹ -> Con: Đúng 2.5 lần chiều cao
-    const gapChild = NW / 2;           // Khoảng cách giữa các dòng con = 1/2 khung tên
-    const stepGap = NW / 5;            // Con riêng cách con chung = 1/5 khung tên
+    const yWife = yFather + NH * 2;    
+    const yChild = yWife + NH * 2.5;   
+    const gapChild = NW / 2;           
+    const stepGap = NW / 5;            
 
-    // Tính toán độ rộng tổng thể để căn giữa
     const totalWifeWidth = Math.max(NW, wives.length * NW + Math.max(0, wives.length - 1) * gapWife);
     const centerX = 400 + totalWifeWidth / 2; 
     const fatherCx = centerX;
 
-    // 1. Vẽ Bố (Hàng trên, ở giữa)
+    // 1. Vẽ Bố
     nodes.push({ id: focus.id, person: focus, x: fatherCx - NW/2, y: yFather, w: NW, h: NH, type: 'blood' });
     seen.add(focus.id);
 
-    // 2. Vẽ các bà vợ (Hàng giữa) - KHÔNG NỐI VỚI NHAU
+    // 2. Vẽ Vợ
     let wifeStartX = centerX - totalWifeWidth / 2;
     const wifePos = {};
     wives.forEach(w => {
       if (seen.has(w.id)) return;
       nodes.push({ id: w.id, person: w, x: wifeStartX, y: yWife, w: NW, h: NH, type: 'spouse' });
-      // Nối từ Bố xuống Vợ (Duy nhất đường này)
       links.push({ from: { x: fatherCx, y: yFather + NH }, to: { x: wifeStartX + NW/2, y: yWife }, type: 'blood' });
       wifePos[w.id] = { cx: wifeStartX + NW/2 };
       wifeStartX += NW + gapWife; 
       seen.add(w.id);
     });
 
-    // 3. Vẽ các con (Hàng dưới)
+    // 3. Vẽ Con
     let currentDrawX = 400; 
 
     function drawChildNode(k, drawX, isStep = false) {
@@ -364,7 +387,6 @@
       const nodeType = isStep ? 'spouse' : 'blood';
       nodes.push({ id: k.id, person: k, x: drawX, y: yChild, w: NW, h: NH, type: nodeType });
       
-      // Vẽ vợ/chồng của người con này (nếu có) - đặt ngay dưới
       const sp = (spousesOf.get(String(k.id)) || []).map(s => byId.get(s.spouseId)).filter(Boolean)[0];
       if (sp && !seen.has(sp.id)) {
         nodes.push({ id: sp.id, person: sp, x: drawX, y: yChild + NH + 15, w: NW, h: NH, type: 'spouse' });
@@ -374,23 +396,20 @@
       return drawX + NW/2;
     }
 
-    // 3.1. Phân bổ con theo từng bà vợ
     const processedKids = new Set();
     
     wives.forEach(w => {
-      // Tìm con chung
       const sharedKids = allFocusKids.filter(k => 
         !processedKids.has(k.id) &&
         parentChild.some(pc => pc.child_id === k.id && pc.parent_id === w.id && pc.parent_role === 'Mẹ')
       );
       
-      // Tìm con riêng của bà vợ này
       const stepKids = (childrenOf.get(String(w.id)) || [])
         .map(cid => byId.get(cid)).filter(Boolean)
         .filter(k => !parentChild.some(pc => pc.child_id === k.id && pc.parent_id === focus.id && pc.parent_role === 'Bố'))
         .sort((a,b) => (a.birth_order || 999) - (b.birth_order || 999));
 
-      // Vẽ con chung (Có đường nối từ Mẹ xuống)
+      // Con chung
       sharedKids.forEach(k => {
         const childCx = drawChildNode(k, currentDrawX, false);
         links.push({
@@ -402,7 +421,7 @@
         currentDrawX += NW + gapChild;
       });
 
-      // Vẽ con riêng (Ngang hàng bên phải con chung, KHÔNG CÓ ĐƯỜNG NỐI)
+      // Con riêng
       stepKids.forEach(k => {
         let stepX = sharedKids.length > 0 
           ? (currentDrawX - gapChild) + stepGap 
@@ -414,16 +433,15 @@
       });
     });
 
-    // 3.2. Vẽ con không mẹ (Con nuôi, ngoài giá thú) - ĐẨY SANG PHẢI, KHÔNG CÓ ĐƯỜNG NỐI
+    // 4. Con không mẹ
     const noMomKids = allFocusKids.filter(k => 
       !processedKids.has(k.id) && 
       !parentChild.some(pc => pc.child_id === k.id && pc.parent_role === 'Mẹ')
     );
     
     noMomKids.forEach(k => {
-      // Thụt lề thêm 1 khoảng so với con chung cuối cùng để tách biệt
       let startX = currentDrawX > 400 ? currentDrawX + stepGap : currentDrawX;
-      drawChildNode(k, startX, true); // type 'spouse' (nhạt) hoặc tùy data
+      drawChildNode(k, startX, true); 
       processedKids.add(k.id);
       currentDrawX = startX + NW + gapChild;
     });
