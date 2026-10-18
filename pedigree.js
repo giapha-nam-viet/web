@@ -290,26 +290,27 @@
     const NW = CFG.node.w, NH = CFG.node.h;
     const focus = byId.get(String(focusId));
     if (!focus) return null;
-
     const nodes = [], links = [], seen = new Set();
+
     const wives = (spousesOf.get(String(focusId)) || []).map(s => byId.get(s.spouseId)).filter(Boolean);
     const kids = (childrenOf.get(String(focusId)) || []).map(cid => byId.get(cid)).filter(Boolean);
 
-    // Khoảng cách theo yêu cầu của bạn
+    // --- KHOẢNG CÁCH CHUẨN THEO YÊU CẦU ---
     const gapWife = NW / 2;          // Khoảng cách giữa các bà vợ
     const yFather = 100;
-    const yWife = yFather + NH;      // Cách Bố 1 chiều cao
+    const yWife = yFather + NH * 2;  // Cách Bố 1 chiều cao khung tên (tính cả khoảng trống)
     const yChild = yWife + NH * 2.5; // Cách Mẹ 2.5 chiều cao
-    const ySpouseOfChild = NH / 3;   // Cách Con 1/3 chiều cao
+    const yChildSpouse = NH / 3;     // Cách con 1/3 chiều cao
     const gapChild = NH * (2/3);     // Khoảng cách giữa các con
 
-    // 1. Vẽ Bố (Focus)
     const totalWidth = wives.length * NW + (wives.length - 1) * gapWife;
     const centerX = 300 + totalWidth / 2;
+
+    // --- 1. VẼ BỐ ---
     nodes.push({ id: focus.id, person: focus, x: centerX - NW/2, y: yFather, w: NW, h: NH, type: 'blood' });
     seen.add(focus.id);
 
-    // 2. Vẽ các bà vợ (xếp ngang)
+    // --- 2. VẼ CÁC BÀ VỢ ---
     let wifeStartX = centerX - totalWidth / 2;
     const wifePos = {};
     wives.forEach(w => {
@@ -320,62 +321,53 @@
       wifeStartX += NW + gapWife; seen.add(w.id);
     });
 
-    // 3. Vẽ các con
-    let currentX = 300; // Bắt đầu từ lề trái
-    const childPos = {};
-
-    // Hàm phụ: vẽ 1 con và vợ/chồng của con đó
-    function drawChild(k, parentCx, startX) {
+    // --- 3. VẼ CÁC CON & VỢ/CHỒNG CỦA CON ---
+    let currentX = 300;
+    
+    function drawChild(k, parentCx) {
       if (seen.has(k.id)) return;
-      nodes.push({ id: k.id, person: k, x: startX, y: yChild, w: NW, h: NH, type: 'blood' });
-      links.push({ from: { x: parentCx, y: yWife + NH }, to: { x: startX + NW/2, y: yChild }, type: 'blood' });
-      seen.add(k.id);
-      childPos[k.id] = { x: startX, cx: startX + NW/2 };
-
-      // Vẽ vợ/chồng của con (nếu có)
+      nodes.push({ id: k.id, person: k, x: currentX, y: yChild, w: NW, h: NH, type: 'blood' });
+      links.push({ from: { x: parentCx, y: yWife + NH }, to: { x: currentX + NW/2, y: yChild }, type: 'blood' });
+      
+      // Vẽ vợ/chồng của con (nằm ngay dưới)
       const sp = (spousesOf.get(String(k.id)) || []).map(s => byId.get(s.spouseId)).filter(Boolean)[0];
       if (sp && !seen.has(sp.id)) {
-        nodes.push({ id: sp.id, person: sp, x: startX, y: yChild + NH + ySpouseOfChild, w: NW, h: NH, type: 'spouse' });
+        nodes.push({ id: sp.id, person: sp, x: currentX, y: yChild + NH + yChildSpouse, w: NW, h: NH, type: 'spouse' });
         seen.add(sp.id);
       }
+      seen.add(k.id);
+      const kidCx = currentX + NW/2;
+      currentX += NW + gapChild;
+      return kidCx;
     }
 
-    // 3.1 Vẽ con chung của từng bà vợ
+    // 3.1. Vẽ con chung của từng bà vợ (nối thẳng từ mẹ)
     wives.forEach(w => {
       const wKids = kids.filter(k => parentChild.some(pc => pc.child_id === k.id && pc.parent_id === w.id && pc.parent_role === 'Mẹ'));
       wKids.forEach(k => {
-        drawChild(k, wifePos[w.id].cx, currentX);
-        currentX += NW + gapChild;
+        if (seen.has(k.id)) return;
+        const isStep = !parentChild.some(pc => pc.child_id === k.id && pc.parent_id === focus.id && pc.parent_role === 'Bố');
+        
+        if (isStep) {
+          // Nếu là con riêng: xếp cạnh con chung cuối cùng của mẹ
+          const lastChildX = currentX - NW - gapChild;
+          if (lastChildX > wifePos[w.id].x) {
+            nodes.push({ id: k.id, person: k, x: lastChildX + NW + NW/5, y: yChild, w: NW, h: NH, type: 'spouse' });
+            seen.add(k.id);
+            currentX += NW/5;
+          } else {
+            drawChild(k, wifePos[w.id].cx); // Chưa có con chung nào thì vẽ như con bình thường
+          }
+        } else {
+          drawChild(k, wifePos[w.id].cx);
+        }
       });
     });
 
-    // 3.2 Vẽ con không mẹ (con nuôi, ngoài giá thú) bên phải cùng
+    // 3.2. Vẽ con không mẹ (nối thẳng lên Bố)
     const noMomKids = kids.filter(k => !parentChild.some(pc => pc.child_id === k.id && pc.parent_role === 'Mẹ'));
     noMomKids.forEach(k => {
-      drawChild(k, centerX, currentX);
-      currentX += NW + gapChild;
-    });
-
-    // 4. Xử lý Con riêng của vợ (Lê Thị Ba)
-    // Tìm những đứa con không phải con ruột của Bố nhưng có mẹ trong danh sách vợ
-    wives.forEach(w => {
-      const wKids = kids.filter(k => parentChild.some(pc => pc.child_id === k.id && pc.parent_id === w.id && pc.parent_role === 'Mẹ'));
-      const stepKids = wKids.filter(k => !parentChild.some(pc => pc.child_id === k.id && pc.parent_id === focus.id && pc.parent_role === 'Bố'));
-      
-      stepKids.forEach(step => {
-        if (seen.has(step.id)) return; // Đã vẽ ở trên rồi thì thôi
-        // Nếu chưa vẽ, xếp ngang hàng bên phải con chung của mẹ đó
-        const momKids = wKids.filter(k => k.id !== step.id);
-        let lastX = wifePos[w.id].x;
-        if (momKids.length > 0) {
-          const lastMomKid = momKids[momKids.length - 1];
-          lastX = childPos[lastMomKid.id] ? childPos[lastMomKid.id].x : lastX;
-        }
-        const posX = lastX + NW + gapChild;
-        nodes.push({ id: step.id, person: step, x: posX, y: yChild, w: NW, h: NH, type: 'spouse' });
-        seen.add(step.id);
-        childPos[step.id] = { x: posX, cx: posX + NW/2 };
-      });
+      drawChild(k, centerX);
     });
 
     const maxX = Math.max(...nodes.map(n => n.x + n.w), 400) + 100;
