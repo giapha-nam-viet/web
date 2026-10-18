@@ -1,24 +1,24 @@
 /* ============================================================
-   pedigree.js v7.0 — Layout kiểu A (con nằm dưới cha)
-   - Đệ quy post-order: mỗi cây con có không gian riêng
-   - Sắp xếp thứ bậc chuẩn (con trưởng trái, con nuôi phải)
-   - Lớp 2: Bố giữa, Vợ ngang, Con phân cụm, xử lý con riêng
+   pedigree.js v9.0 — Bản sửa lỗi tuyệt đối (Layout A)
+   - Sửa lỗi vị trí và màu sắc của Vợ/Chồng (Trần Thị Mai).
+   - Sắp xếp con chuẩn: Con trưởng trái, Con nuôi/Ngoài giá thú phải.
+   - Lớp 2: Bỏ đường nối giữa các bà vợ. Bỏ đường nối của con riêng & con nuôi.
    ============================================================ */
 (function () {
   'use strict';
   const LOG = '[Pedigree]';
-  console.log(LOG, '⭐ v7.0 loaded — Layout kiểu A');
+  console.log(LOG, '⭐ v9.0 loaded — Bản sửa lỗi tuyệt đối');
 
   // ---------- CONFIG ----------
   const CFG = {
     node:      { w: 180, h: 56 },
-    gapX:      30,
+    gapX:      40,
     gapY:      90,
     padding:   60,
-    spouseGap: 8,
+    spouseGap: 10,
     colors: {
-      blood:  { stroke: '#88a9ad', fill: '#F5FAFA' },
-      spouse: { stroke: '#b4c8ca', fill: '#F8FBFB' },
+      blood:  { stroke: '#88a9ad', fill: '#F5FAFA' }, // Xanh đậm cho huyết thống
+      spouse: { stroke: '#b4c8ca', fill: '#F8FBFB' }, // Xanh nhạt cho vợ/chồng/con riêng
       focus:  { stroke: '#88a9ad', fill: '#FFF9E6' },
       linkBlood: '#bd9733',
       linkMarry: '#C97A7A'
@@ -37,7 +37,6 @@
   let familyFocusId = null;    // ID người focus khi viewMode='family'
 
   // ---------- HELPERS ----------
-  function isBlood(p) { return p && p.role_type === 'Huyết thống'; }
   function isFaded(p) {
     return p && (p.special_status === 'Mất sớm' || p.special_status === 'Không rõ');
   }
@@ -46,9 +45,6 @@
     if (p.special_status === 'Mất sớm') return 'mất sớm';
     if (p.special_status === 'Không rõ') return 'thất lạc';
     return '';
-  }
-  function sortKey(p) {
-    return p?.birth_order ?? p?.sibling_order ?? 9999;
   }
 
   // ---------- ENTRY ----------
@@ -101,7 +97,20 @@
     const parentsOf = new Map();
     const childToFather = new Map();
     const childToMother = new Map();
+    const spousesOf = new Map();
 
+    // 1. Xử lý hôn nhân (Marriages)
+    marriages.forEach(m => {
+      const h = String(m.husband_id), w = String(m.wife_id);
+      const ord = m.marriage_order || 0;
+      if (!byId.has(h) || !byId.has(w)) return;
+      if (!spousesOf.has(h)) spousesOf.set(h, []);
+      if (!spousesOf.has(w)) spousesOf.set(w, []);
+      spousesOf.get(h).push({ spouseId: w, order: ord });
+      spousesOf.get(w).push({ spouseId: h, order: ord });
+    });
+
+    // 2. Xử lý cha mẹ - con cái (Parent-Child)
     pcLinks.forEach(l => {
       const pid = String(l.parent_id), cid = String(l.child_id);
       if (!byId.has(pid) || !byId.has(cid)) return;
@@ -126,39 +135,26 @@
       if (childToMother.has(cid)) arr.push(childToMother.get(cid));
       parentsOf.set(cid, arr);
     });
-    // Chuyển Set → Array
     childrenOf.forEach((set, pid) => childrenOf.set(pid, Array.from(set)));
 
-    const spousesOf = new Map();
-    marriages.forEach(m => {
-      const h = String(m.husband_id), w = String(m.wife_id);
-      const ord = m.marriage_order || 0;
-      if (!byId.has(h) || !byId.has(w)) return;
-      if (!spousesOf.has(h)) spousesOf.set(h, []);
-      if (!spousesOf.has(w)) spousesOf.set(w, []);
-      spousesOf.get(h).push({ spouseId: w, order: ord });
-      spousesOf.get(w).push({ spouseId: h, order: ord });
-    });
-
-    // Cụ tổ
+    // 3. Tìm Cụ tổ
     const rootsAll = persons.filter(p => !parentsOf.has(String(p.id)));
     rootsAll.sort((a, b) => (a.generation || 0) - (b.generation || 0));
     if (!rootsAll.length) return null;
     const minGen = rootsAll[0].generation || 1;
-    const rootPersons = rootsAll.filter(p => (p.generation || 0) === minGen && isBlood(p));
+    const rootPersons = rootsAll.filter(p => (p.generation || 0) === minGen);
     if (!rootPersons.length) rootPersons.push(rootsAll[0]);
 
     const branchSet = new Set();
     persons.forEach(p => { if (p.branch && p.branch.trim()) branchSet.add(p.branch.trim()); });
     const branches = Array.from(branchSet).sort();
 
-    console.log(LOG, `tree: ${rootPersons.length} roots, ${branches.length} branches`);
     return { byId, childrenOf, parentsOf, spousesOf, roots: rootPersons, branches, minGen };
   }
 
   // ---------- 3) COMPUTE LAYOUT (Toàn cảnh) ----------
   function computeLayout(tree) {
-    console.log(LOG, 'computeLayout v7.0...');
+    console.log(LOG, 'computeLayout v9.0...');
     const { byId, childrenOf, spousesOf, roots } = tree;
     const NW = CFG.node.w, NH = CFG.node.h;
     const spouseGap = CFG.spouseGap;
@@ -179,20 +175,32 @@
 
       const blockH = NH + spouses.length * (NH + spouseGap);
 
-      // ⭐ SẮP XẾP THỨ BẬC CHUẨN (FILE 3)
+      // ⭐ SẮP XẾP CON CHUẨN XÁC
       const childIds = (childrenOf.get(pid) || [])
         .map(cid => byId.get(cid))
         .filter(Boolean)
         .sort((a, b) => {
-          // Ưu tiên 1: Con nuôi / Con ngoài giá thú bị đẩy ra sau
+          // Ưu tiên 1: Con ruột (0) xếp trước, Con nuôi/Ngoài giá thú (1) xếp sau
           const isSpecialA = (a.special_status === 'Con nuôi' || a.special_status === 'Con ngoài giá thú') ? 1 : 0;
           const isSpecialB = (b.special_status === 'Con nuôi' || b.special_status === 'Con ngoài giá thú') ? 1 : 0;
           if (isSpecialA !== isSpecialB) return isSpecialA - isSpecialB;
           
-          // Ưu tiên 2: Thứ tự sinh (Con trưởng nằm trái)
-          const orderA = a.birth_order || a.sibling_order || 999;
-          const orderB = b.birth_order || b.sibling_order || 999;
-          return orderA - orderB;
+          // Ưu tiên 2: Thứ tự sinh
+          let orderA = a.birth_order || a.sibling_order;
+          let orderB = b.birth_order || b.sibling_order;
+          
+          // Fallback: Nếu DB trống, dùng năm sinh để sắp xếp (ai sinh trước xếp trước)
+          if (orderA === undefined || orderA === null) {
+            orderA = a.birth_year || 9999;
+            if (b.birth_year && orderA === 9999) orderA = b.birth_year + 1; 
+          }
+          if (orderB === undefined || orderB === null) {
+            orderB = b.birth_year || 9999;
+            if (a.birth_year && orderB === 9999) orderB = a.birth_year + 1;
+          }
+          
+          if (orderA !== orderB) return orderA - orderB;
+          return (a.full_name || '').localeCompare(b.full_name || '');
         });
 
       const childSubtrees = [];
@@ -234,12 +242,15 @@
       const nodeX = absX - NW / 2;
       const nodeY = absY;
 
+      // Người chính (Nếu là Vợ/Chồng thì màu nhạt, ngược lại màu đậm)
+      const isFocusSpouse = person.role_type === 'Vợ' || person.role_type === 'Chồng' || person.gender === 'Nữ' && !childrenOf.has(pid);
       nodes.push({
         id: pid, person, spouse: null,
         x: nodeX, y: nodeY, w: NW, h: NH,
-        type: isBlood(person) ? 'blood' : 'spouse'
+        type: isFocusSpouse ? 'spouse' : 'blood'
       });
 
+      // Vẽ vợ/chồng (Luôn màu nhạt, xếp dọc bên dưới)
       let spY = nodeY + NH + spouseGap;
       spouses.forEach(sp => {
         const spId = String(sp.id);
@@ -257,6 +268,7 @@
         spY += NH + spouseGap;
       });
 
+      // Vẽ các con
       children.forEach(sub => {
         const childX = absX + sub.offsetX;
         const childYAbs = absY + childY;
@@ -289,30 +301,35 @@
     const maxX = Math.max(...nodes.map(n => n.x + n.w), 200) + CFG.padding;
     const maxY = Math.max(...nodes.map(n => n.y + n.h), 200) + CFG.padding;
 
-    console.log(LOG, `layout v7.0: ${nodes.length} nodes, ${links.length} links, ${Math.round(maxX)}×${Math.round(maxY)}`);
     return { nodes, links, width: maxX, height: maxY };
   }
 
   // ---------- 3.5) FAMILY LAYOUT (Lớp 2) ----------
   function computeFamilyLayout(tree, focusId) {
-    console.log(LOG, 'computeFamilyLayout v7.0 (Lớp 2)...');
+    console.log(LOG, 'computeFamilyLayout v9.0 (Lớp 2)...');
     const { byId, childrenOf, spousesOf } = tree;
     const NW = CFG.node.w, NH = CFG.node.h;
     const focus = byId.get(String(focusId));
     if (!focus) return null;
     
     const nodes = [], links = [], seen = new Set();
-    const wives = (spousesOf.get(String(focusId)) || []).map(s => byId.get(s.spouseId)).filter(Boolean);
+    const wives = (spousesOf.get(String(focusId)) || [])
+      .sort((a,b) => (a.order||0) - (b.order||0))
+      .map(s => byId.get(s.spouseId)).filter(Boolean);
     
     // Lấy tất cả các con của Focus
     const allFocusKids = (childrenOf.get(String(focusId)) || [])
       .map(cid => byId.get(cid)).filter(Boolean)
-      .sort((a, b) => (a.birth_order || a.sibling_order || 999) - (b.birth_order || b.sibling_order || 999));
+      .sort((a, b) => {
+        let orderA = a.birth_order || a.sibling_order || 999;
+        let orderB = b.birth_order || b.sibling_order || 999;
+        return orderA - orderB;
+      });
 
     // --- CẤU HÌNH KHOẢNG CÁCH LỚP 2 (FILE 888) ---
     const gapWife = NW / 2;            // Khoảng cách giữa các bà vợ = 1/2 khung tên
     const yFather = 100;               
-    const yWife = yFather + NH * 2;    // Bố -> Vợ: Rộng rãi (ít nhất 1.5 lần, ở đây dùng 2 lần cho thoáng)
+    const yWife = yFather + NH * 2;    // Bố -> Vợ: Rộng rãi (2 lần chiều cao)
     const yChild = yWife + NH * 2.5;   // Mẹ -> Con: Đúng 2.5 lần chiều cao
     const gapChild = NW / 2;           // Khoảng cách giữa các dòng con = 1/2 khung tên
     const stepGap = NW / 5;            // Con riêng cách con chung = 1/5 khung tên
@@ -326,13 +343,13 @@
     nodes.push({ id: focus.id, person: focus, x: fatherCx - NW/2, y: yFather, w: NW, h: NH, type: 'blood' });
     seen.add(focus.id);
 
-    // 2. Vẽ các bà vợ (Hàng giữa)
+    // 2. Vẽ các bà vợ (Hàng giữa) - KHÔNG NỐI VỚI NHAU
     let wifeStartX = centerX - totalWifeWidth / 2;
     const wifePos = {};
     wives.forEach(w => {
       if (seen.has(w.id)) return;
       nodes.push({ id: w.id, person: w, x: wifeStartX, y: yWife, w: NW, h: NH, type: 'spouse' });
-      // Nối từ Bố xuống Vợ
+      // Nối từ Bố xuống Vợ (Duy nhất đường này)
       links.push({ from: { x: fatherCx, y: yFather + NH }, to: { x: wifeStartX + NW/2, y: yWife }, type: 'blood' });
       wifePos[w.id] = { cx: wifeStartX + NW/2 };
       wifeStartX += NW + gapWife; 
@@ -340,12 +357,12 @@
     });
 
     // 3. Vẽ các con (Hàng dưới)
-    let currentDrawX = 400; // Bắt đầu vẽ từ trái sang phải
+    let currentDrawX = 400; 
 
-    // Hàm phụ vẽ 1 người con
     function drawChildNode(k, drawX, isStep = false) {
       if (seen.has(k.id)) return null;
-      nodes.push({ id: k.id, person: k, x: drawX, y: yChild, w: NW, h: NH, type: isStep ? 'spouse' : 'blood' });
+      const nodeType = isStep ? 'spouse' : 'blood';
+      nodes.push({ id: k.id, person: k, x: drawX, y: yChild, w: NW, h: NH, type: nodeType });
       
       // Vẽ vợ/chồng của người con này (nếu có) - đặt ngay dưới
       const sp = (spousesOf.get(String(k.id)) || []).map(s => byId.get(s.spouseId)).filter(Boolean)[0];
@@ -354,14 +371,14 @@
         seen.add(sp.id);
       }
       seen.add(k.id);
-      return drawX + NW/2; // Trả về tâm X của con
+      return drawX + NW/2;
     }
 
     // 3.1. Phân bổ con theo từng bà vợ
     const processedKids = new Set();
     
     wives.forEach(w => {
-      // Tìm con chung của Bố và bà vợ này
+      // Tìm con chung
       const sharedKids = allFocusKids.filter(k => 
         !processedKids.has(k.id) &&
         parentChild.some(pc => pc.child_id === k.id && pc.parent_id === w.id && pc.parent_role === 'Mẹ')
@@ -373,48 +390,42 @@
         .filter(k => !parentChild.some(pc => pc.child_id === k.id && pc.parent_id === focus.id && pc.parent_role === 'Bố'))
         .sort((a,b) => (a.birth_order || 999) - (b.birth_order || 999));
 
-      // Vẽ con chung (Nối thẳng đứng từ Mẹ xuống)
+      // Vẽ con chung (Có đường nối từ Mẹ xuống)
       sharedKids.forEach(k => {
         const childCx = drawChildNode(k, currentDrawX, false);
-        // Đường nối Mẹ -> Con: Vẽ vuông góc (đi xuống, rẽ ngang, đi xuống)
         links.push({
            from: { x: wifePos[w.id].cx, y: yWife + NH },
            to:   { x: childCx, y: yChild },
            type: 'blood_straight'
         });
-        
         processedKids.add(k.id);
         currentDrawX += NW + gapChild;
       });
 
-      // Vẽ con riêng (Ngang hàng bên phải con chung, không có đường nối)
+      // Vẽ con riêng (Ngang hàng bên phải con chung, KHÔNG CÓ ĐƯỜNG NỐI)
       stepKids.forEach(k => {
         let stepX = sharedKids.length > 0 
-          ? (currentDrawX - gapChild) + stepGap // Sát bên phải con chung vừa vẽ
-          : currentDrawX;                       // Nếu không có con chung thì vẽ từ đầu
+          ? (currentDrawX - gapChild) + stepGap 
+          : currentDrawX;
         
-        drawChildNode(k, stepX, true); // type='spouse' để ra màu xanh nhạt
+        drawChildNode(k, stepX, true); 
         processedKids.add(k.id);
         currentDrawX = stepX + NW + gapChild;
       });
     });
 
-    // 3.2. Vẽ con không mẹ (Con nuôi, ngoài giá thú) - Nối thẳng lên Bố
+    // 3.2. Vẽ con không mẹ (Con nuôi, ngoài giá thú) - ĐẨY SANG PHẢI, KHÔNG CÓ ĐƯỜNG NỐI
     const noMomKids = allFocusKids.filter(k => 
       !processedKids.has(k.id) && 
       !parentChild.some(pc => pc.child_id === k.id && pc.parent_role === 'Mẹ')
     );
     
     noMomKids.forEach(k => {
-      const childCx = drawChildNode(k, currentDrawX, false);
-      // Nối thẳng đứng lên Bố
-      links.push({ 
-        from: { x: fatherCx, y: yFather + NH }, 
-        to:   { x: childCx, y: yChild }, 
-        type: 'blood_straight' 
-      });
+      // Thụt lề thêm 1 khoảng so với con chung cuối cùng để tách biệt
+      let startX = currentDrawX > 400 ? currentDrawX + stepGap : currentDrawX;
+      drawChildNode(k, startX, true); // type 'spouse' (nhạt) hoặc tùy data
       processedKids.add(k.id);
-      currentDrawX += NW + gapChild;
+      currentDrawX = startX + NW + gapChild;
     });
 
     const maxX = Math.max(...nodes.map(n => n.x + n.w), 400) + 100;
@@ -433,7 +444,6 @@
         layoutData = computeLayout(tree);
       }
       const { nodes, links, width, height } = layoutData;
-      console.log(LOG, `layout: ${nodes.length} nodes, ${links.length} links, ${width}×${height}`);
 
       svg = d3.select(container).append('svg')
         .attr('width', '100%').attr('height', '100%')
@@ -457,11 +467,9 @@
             return `M${d.from.x},${d.from.y} L${d.to.x},${d.to.y}`;
           }
           if (d.type === 'blood_straight') {
-             // Vẽ đường vuông góc cho Lớp 2
              const midY = d.from.y + (d.to.y - d.from.y) * 0.5; 
              return `M${d.from.x},${d.from.y} V${midY} H${d.to.x} V${d.to.y}`;
           }
-          // Mặc định cho toàn cảnh
           const midY = d.from.y + (d.to.y - d.from.y) * 0.6;
           return `M${d.from.x},${d.from.y} V${midY} H${d.to.x} V${d.to.y}`;
         })
@@ -481,18 +489,15 @@
         .style('opacity', d => isFaded(d.person) ? 0.55 : 1)
        .on('click', (evt, d) => {
           evt.stopPropagation();
-          console.log('[Pedigree] click → panel:', d.person.full_name);
           if (viewMode === 'family') {
             familyFocusId = String(d.person.id);
             const container = document.getElementById('pha-do-svg');
             if (container) render(container);
-            console.log('[Pedigree] → Focus family:', d.person.full_name);
           }
           if (window.PedigreePanel) window.PedigreePanel.show(d.person);
         })
         .on('dblclick', (evt, d) => {
           evt.stopPropagation();
-          console.log('[Pedigree] dblclick → modal:', d.person.full_name);
           if (typeof window.openPersonForm === 'function') {
             window.openPersonForm(d.person.id);
           }
@@ -548,7 +553,6 @@
 
   // ---------- 5) TOOLBAR ----------
   function setupToolbar() {
-    console.log(LOG, 'setupToolbar...');
     const bIn = document.getElementById('pd-zoom-in');
     const bOut = document.getElementById('pd-zoom-out');
     const bRst = document.getElementById('pd-reset');
@@ -558,14 +562,12 @@
     if (bRst) bRst.onclick = () => resetZoom();
     if (sel) sel.onchange = () => filterBranch(sel.value);
   }
+
   // ---------- 5.4) VIEW TOGGLE (Toàn cảnh / Lớp 2) ----------
   function setupViewToggle() {
     const btnAll = document.getElementById('pd-view-all');
     const btnFam = document.getElementById('pd-view-family');
-    if (!btnAll || !btnFam) {
-      console.warn(LOG, 'Không tìm thấy nút toggle');
-      return;
-    }
+    if (!btnAll || !btnFam) return;
 
     btnAll.onclick = () => {
       viewMode = 'all';
@@ -574,7 +576,6 @@
       btnFam.classList.remove('is-active');
       const container = document.getElementById('pha-do-svg');
       if (container) render(container);
-      console.log(LOG, '→ Chế độ Toàn cảnh');
     };
 
     btnFam.onclick = () => {
@@ -589,14 +590,12 @@
       }
       const container = document.getElementById('pha-do-svg');
       if (container) render(container);
-      console.log(LOG, '→ Chế độ Lớp 2, focus:', familyFocusId);
     };
 
     btnAll.classList.add('is-active');
-    console.log(LOG, 'setupViewToggle OK');
   }
 
-   function setupSearch() {
+  function setupSearch() {
     const input = document.getElementById('pd-search');
     const clearBtn = document.getElementById('pd-search-clear');
     if (!input) return;
@@ -661,10 +660,9 @@
         input.dispatchEvent(new Event('input'));
       };
     }
-    console.log(LOG, 'setupSearch OK');
   }
 
-   function zoomBy(d) {
+  function zoomBy(d) {
     if (!svg || !zoomBehavior) return;
     const k = Math.max(CFG.zoom.min, Math.min(CFG.zoom.max, currentScale + d));
     svg.transition().duration(200).call(zoomBehavior.scaleTo, k);
@@ -686,19 +684,16 @@
     });
   }
 
-  // ---------- 6) AUTO FOCUS ----------
   function autoFocus() {
     if (!gRoot) return;
     const target = gRoot.selectAll('g.node')
       .filter(d => (d.person.full_name || '').trim() === CFG.focusName);
-    if (target.empty()) { console.warn(LOG, 'Không tìm thấy', CFG.focusName); return; }
+    if (target.empty()) return;
     target.select('rect')
       .attr('fill', CFG.colors.focus.fill)
       .attr('filter', 'url(#focus-glow)');
-    console.log(LOG, 'autoFocus', CFG.focusName, 'OK');
   }
 
-  // ---------- 7) DROPDOWN ----------
   function fillBranchDropdown() {
     const sel = document.getElementById('pd-branch-filter');
     if (!sel || !tree) return;
@@ -710,9 +705,7 @@
     });
   }
 
-  // ---------- BOOT ----------
   function boot() {
-    console.log(LOG, 'boot...');
     setTimeout(function () { init(); }, 500);
   }
   if (document.readyState === 'loading') {
@@ -724,31 +717,19 @@
  window.Pedigree = {
   init, loadAll, buildTree, computeLayout, render, CFG,
   getLayout: () => layoutData,
-  // ⭐ Hàm refresh: load data mới → vẽ lại cây
   refresh: async function () {
-    console.log(LOG, '🔄 refresh() — reload data + re-render');
     try {
       await loadAll();
       tree = buildTree(persons, parentChild, marriages);
-      if (!tree || !tree.roots.length) {
-        console.warn(LOG, 'Không có data để vẽ');
-        return;
-      }
+      if (!tree || !tree.roots.length) return;
       const container = document.getElementById('pha-do-svg');
       if (!container) return;
       render(container);
       fillBranchDropdown();
       autoFocus();
-      console.log(LOG, '✓ refresh xong');
     } catch (e) {
       console.error(LOG, 'refresh error', e);
     }
   }
 };
-  console.log(LOG, '✓ v7.0 Exports:', {
-    init: typeof init,
-    render: typeof render,
-    buildTree: typeof buildTree,
-    computeLayout: typeof computeLayout
-  });
 })();
