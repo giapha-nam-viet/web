@@ -1,17 +1,15 @@
 /* ============================================================
-   pedigree.js v11.0 — Bản thu gọn Layout & Sửa lỗi Auto-Zoom
-   - Giảm khoảng cách ngang (gapX) để cây gọn hơn.
-   - Bỏ viewBox, dùng zoomBehavior để phóng to đúng người.
+   pedigree.js v12.0 — Bản dọn dẹp Đường nối lơ lửng
    ============================================================ */
 (function () {
   'use strict';
   const LOG = '[Pedigree]';
-  console.log(LOG, '⭐ v11.0 loaded — Bản thu gọn Layout');
+  console.log(LOG, '⭐ v12.0 loaded');
 
   const CFG = {
-    node:      { w: 180, h: 60 }, // Khung 180x60 để vừa chữ 14px
-    gapX:      20,                // Thu hẹp khoảng cách ngang (cũ là 40)
-    gapY:      80,                // Thu hẹp khoảng cách dọc (cũ là 100)
+    node:      { w: 180, h: 60 },
+    gapX:      25,                
+    gapY:      90,                
     padding:   60,
     spouseGap: 10,
     colors: {
@@ -21,7 +19,7 @@
       linkBlood: '#bd9733',
       linkMarry: '#C97A7A'
     },
-    zoom: { step: 0.15, min: 0.1, max: 4.0 }, // Nới rộng giới hạn zoom
+    zoom: { step: 0.15, min: 0.1, max: 4.0 },
     focusName: 'Phạm Văn Mỹ'
   };
 
@@ -34,13 +32,7 @@
   let familyFocusId = null;
 
   function isFaded(p) { return p && (p.special_status === 'Mất sớm' || p.special_status === 'Không rõ'); }
-  function fadedLabel(p) {
-    if (!p) return '';
-    if (p.special_status === 'Mất sớm') return 'mất sớm';
-    if (p.special_status === 'Không rõ') return 'thất lạc';
-    return '';
-  }
-
+  
   function init() {
     try {
       sb = window.appSupabase || window.sbClient;
@@ -73,7 +65,6 @@
     persons = p.data || [];
     parentChild = pc.data || [];
     marriages = m.data || [];
-    console.log(LOG, `loaded: ${persons.length} persons, ${parentChild.length} links`);
   }
 
   function buildTree(persons, pcLinks, marriages) {
@@ -139,6 +130,7 @@
       });
     });
 
+    // CHỈ LẤY NHỮNG NGƯỜI CÓ GỐC RỄ (Lọc rác)
     const rootsAll = persons.filter(p => !parentsOf.has(String(p.id)));
     rootsAll.sort((a, b) => (a.generation || 0) - (b.generation || 0));
     if (!rootsAll.length) return null;
@@ -229,6 +221,7 @@
     return { nodes, links, width: maxX, height: maxY };
   }
 
+  // (Giữ nguyên hàm computeFamilyLayout như bản v11)
   function computeFamilyLayout(tree, focusId) {
     const { byId, childrenOf, spousesOf } = tree;
     const NW = CFG.node.w, NH = CFG.node.h;
@@ -312,10 +305,7 @@
       }
       const { nodes, links, width, height } = layoutData;
 
-      // ⭐ BỎ VIEWBOX, DÙNG KÍCH THƯỚC THỰC ĐỂ ZOOM KHÔNG BỊ LỖI
-      svg = d3.select(container).append('svg')
-        .attr('width', '100%').attr('height', '100%')
-        .style('overflow', 'hidden'); // Ẩn thanh cuộn
+      svg = d3.select(container).append('svg').attr('width', '100%').attr('height', '100%').style('overflow', 'hidden');
 
       const defs = svg.append('defs');
       const glow = defs.append('filter').attr('id', 'focus-glow');
@@ -330,7 +320,8 @@
         .attr('d', d => {
           if (d.type === 'marry') return `M${d.from.x},${d.from.y} L${d.to.x},${d.to.y}`;
           if (d.type === 'blood_straight') return `M${d.from.x},${d.from.y} V${d.from.y + (d.to.y - d.from.y) * 0.5} H${d.to.x} V${d.to.y}`;
-          return `M${d.from.x},${d.from.y} V${d.from.y + (d.to.y - d.from.y) * 0.6} H${d.to.x} V${d.to.y}`;
+          // Nối kiểu mượt mà, bo góc
+          return `M${d.from.x},${d.from.y} V${d.from.y + (d.to.y - d.from.y) * 0.5} H${d.to.x} V${d.to.y}`;
         })
         .attr('fill', 'none').attr('stroke', d => d.type === 'marry' ? CFG.colors.linkMarry : CFG.colors.linkBlood).attr('stroke-width', 2).attr('opacity', 0.7);
 
@@ -353,24 +344,16 @@
       zoomBehavior = d3.zoom().scaleExtent([CFG.zoom.min, CFG.zoom.max]).on('zoom', evt => { gRoot.attr('transform', evt.transform); currentScale = evt.transform.k; });
       svg.call(zoomBehavior);
 
-      // ⭐ AUTO ZOOM TÌM ĐÚNG NGƯỜI (Kể cả khi đổi Layout)
       let target = nodeG.selectAll('g.node').filter(d => (d.person.full_name || '').trim() === CFG.focusName);
-      if (target.empty() && tree.roots.length > 0) {
-         target = nodeG.selectAll('g.node').filter(d => String(d.person.id) === String(tree.roots[0].id));
-      }
+      if (target.empty() && tree.roots.length > 0) target = nodeG.selectAll('g.node').filter(d => String(d.person.id) === String(tree.roots[0].id));
 
       if (!target.empty()) {
          target.select('rect').attr('fill', CFG.colors.focus.fill).attr('filter', 'url(#focus-glow)');
-         const d = target.datum();
-         const k = 1.5; // Phóng to 1.5 lần
+         const d = target.datum(); const k = 1.5; 
          const centerX = d.x + CFG.node.w / 2; const centerY = d.y + CFG.node.h / 2;
          const svgW = svg.node().clientWidth || 1000; const svgH = svg.node().clientHeight || 800;
          const tx = svgW / 2 - centerX * k; const ty = svgH / 2 - centerY * k;
-         
-         // Dùng setTimeout để đảm bảo DOM đã render xong mới Zoom
-         setTimeout(() => {
-             svg.transition().duration(800).call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(k));
-         }, 100);
+         setTimeout(() => { svg.transition().duration(800).call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(k)); }, 100);
       }
     } catch (e) { console.error(LOG, 'render crash', e); }
   }
