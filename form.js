@@ -464,7 +464,7 @@
     row.id = rowId;
     row.style.position = 'relative';
     row.style.display = 'grid';
-    row.style.gridTemplateColumns = '100px 1fr auto auto'; // Thêm cột cho nút
+    row.style.gridTemplateColumns = '100px 1fr auto auto'; // 4 cột: Nhãn - Ô nhập - 2 nút mũi tên - Nút xoá
     row.style.gap = '8px';
     row.style.alignItems = 'center';
 
