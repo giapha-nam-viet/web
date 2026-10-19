@@ -1,17 +1,19 @@
 /* ============================================================
-   pedigree.js v10.2 — Bản sửa lỗi Auto-Zoom (Fallback Cụ Tổ)
+   pedigree.js v11.0 — Bản thu gọn Layout & Sửa lỗi Auto-Zoom
+   - Giảm khoảng cách ngang (gapX) để cây gọn hơn.
+   - Bỏ viewBox, dùng zoomBehavior để phóng to đúng người.
    ============================================================ */
 (function () {
   'use strict';
   const LOG = '[Pedigree]';
-  console.log(LOG, '⭐ v10.2 loaded');
+  console.log(LOG, '⭐ v11.0 loaded — Bản thu gọn Layout');
 
   const CFG = {
-    node:      { w: 200, h: 70 },
-    gapX:      40,
-    gapY:      100,
-    padding:   80,
-    spouseGap: 12,
+    node:      { w: 180, h: 60 }, // Khung 180x60 để vừa chữ 14px
+    gapX:      20,                // Thu hẹp khoảng cách ngang (cũ là 40)
+    gapY:      80,                // Thu hẹp khoảng cách dọc (cũ là 100)
+    padding:   60,
+    spouseGap: 10,
     colors: {
       blood:  { stroke: '#88a9ad', fill: '#F5FAFA' },
       spouse: { stroke: '#b4c8ca', fill: '#F8FBFB' },
@@ -19,7 +21,7 @@
       linkBlood: '#bd9733',
       linkMarry: '#C97A7A'
     },
-    zoom: { step: 0.15, min: 0.3, max: 4.0 },
+    zoom: { step: 0.15, min: 0.1, max: 4.0 }, // Nới rộng giới hạn zoom
     focusName: 'Phạm Văn Mỹ'
   };
 
@@ -310,10 +312,10 @@
       }
       const { nodes, links, width, height } = layoutData;
 
+      // ⭐ BỎ VIEWBOX, DÙNG KÍCH THƯỚC THỰC ĐỂ ZOOM KHÔNG BỊ LỖI
       svg = d3.select(container).append('svg')
         .attr('width', '100%').attr('height', '100%')
-        .attr('viewBox', `0 0 ${width} ${height}`)
-        .attr('preserveAspectRatio', 'xMidYMid meet');
+        .style('overflow', 'hidden'); // Ẩn thanh cuộn
 
       const defs = svg.append('defs');
       const glow = defs.append('filter').attr('id', 'focus-glow');
@@ -343,31 +345,29 @@
         .attr('fill', d => d.type === 'spouse' ? CFG.colors.spouse.fill : CFG.colors.blood.fill)
         .attr('stroke', d => d.type === 'spouse' ? CFG.colors.spouse.stroke : CFG.colors.blood.stroke).attr('stroke-width', d => d.type === 'spouse' ? 1.5 : 2.5);
 
-      node.append('text').attr('x', d => d.w / 2).attr('y', 25).attr('text-anchor', 'middle').attr('font-size', 14).attr('font-weight', 'bold').attr('fill', '#2c3e3f').text(d => d.person.full_name || '?');
-      node.append('text').attr('x', d => d.w / 2).attr('y', 45).attr('text-anchor', 'middle').attr('font-size', 12).attr('fill', '#6b7c7d').text(d => {
+      node.append('text').attr('x', d => d.w / 2).attr('y', 22).attr('text-anchor', 'middle').attr('font-size', 14).attr('font-weight', 'bold').attr('fill', '#2c3e3f').text(d => d.person.full_name || '?');
+      node.append('text').attr('x', d => d.w / 2).attr('y', 42).attr('text-anchor', 'middle').attr('font-size', 12).attr('fill', '#6b7c7d').text(d => {
         const b = d.person.birth_year, m = d.person.death_year; if (b && m) return `${b} – ${m}`; if (b) return `${b} –`; return '';
       });
 
       zoomBehavior = d3.zoom().scaleExtent([CFG.zoom.min, CFG.zoom.max]).on('zoom', evt => { gRoot.attr('transform', evt.transform); currentScale = evt.transform.k; });
       svg.call(zoomBehavior);
 
-      // ⭐ TỰ ĐỘNG ZOOM: Ưu tiên Phạm Văn Mỹ, nếu không có thì Zoom vào Cụ Tổ
+      // ⭐ AUTO ZOOM TÌM ĐÚNG NGƯỜI (Kể cả khi đổi Layout)
       let target = nodeG.selectAll('g.node').filter(d => (d.person.full_name || '').trim() === CFG.focusName);
-      
       if (target.empty() && tree.roots.length > 0) {
-         // Fallback: Không tìm thấy Mỹ, zoom vào người đầu tiên của Đời 1
          target = nodeG.selectAll('g.node').filter(d => String(d.person.id) === String(tree.roots[0].id));
       }
 
       if (!target.empty()) {
          target.select('rect').attr('fill', CFG.colors.focus.fill).attr('filter', 'url(#focus-glow)');
          const d = target.datum();
-         const k = 1.5; // Hệ số zoom
+         const k = 1.5; // Phóng to 1.5 lần
          const centerX = d.x + CFG.node.w / 2; const centerY = d.y + CFG.node.h / 2;
          const svgW = svg.node().clientWidth || 1000; const svgH = svg.node().clientHeight || 800;
          const tx = svgW / 2 - centerX * k; const ty = svgH / 2 - centerY * k;
          
-         // Delay một chút để đảm bảo DOM đã render xong
+         // Dùng setTimeout để đảm bảo DOM đã render xong mới Zoom
          setTimeout(() => {
              svg.transition().duration(800).call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(k));
          }, 100);
