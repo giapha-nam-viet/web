@@ -1,17 +1,17 @@
 /* ============================================================
-   pedigree.js v12.0 — Bản dọn dẹp Đường nối lơ lửng
+   pedigree.js v12.1 — Bản sửa lỗi dính khung & đường kẻ lơ lửng
    ============================================================ */
 (function () {
   'use strict';
   const LOG = '[Pedigree]';
-  console.log(LOG, '⭐ v12.0 loaded');
+  console.log(LOG, '⭐ v12.1 loaded');
 
   const CFG = {
     node:      { w: 180, h: 60 },
-    gapX:      25,                
-    gapY:      90,                
+    gapX:      50,                // Tăng khoảng cách ngang để không dính
+    gapY:      120,               // Tăng khoảng cách dọc
     padding:   60,
-    spouseGap: 10,
+    spouseGap: 15,
     colors: {
       blood:  { stroke: '#88a9ad', fill: '#F5FAFA' },
       spouse: { stroke: '#b4c8ca', fill: '#F8FBFB' },
@@ -130,7 +130,6 @@
       });
     });
 
-    // CHỈ LẤY NHỮNG NGƯỜI CÓ GỐC RỄ (Lọc rác)
     const rootsAll = persons.filter(p => !parentsOf.has(String(p.id)));
     rootsAll.sort((a, b) => (a.generation || 0) - (b.generation || 0));
     if (!rootsAll.length) return null;
@@ -221,7 +220,6 @@
     return { nodes, links, width: maxX, height: maxY };
   }
 
-  // (Giữ nguyên hàm computeFamilyLayout như bản v11)
   function computeFamilyLayout(tree, focusId) {
     const { byId, childrenOf, spousesOf } = tree;
     const NW = CFG.node.w, NH = CFG.node.h;
@@ -320,8 +318,7 @@
         .attr('d', d => {
           if (d.type === 'marry') return `M${d.from.x},${d.from.y} L${d.to.x},${d.to.y}`;
           if (d.type === 'blood_straight') return `M${d.from.x},${d.from.y} V${d.from.y + (d.to.y - d.from.y) * 0.5} H${d.to.x} V${d.to.y}`;
-          // Nối kiểu mượt mà, bo góc
-          return `M${d.from.x},${d.from.y} V${d.from.y + (d.to.y - d.from.y) * 0.5} H${d.to.x} V${d.to.y}`;
+          return `M${d.from.x},${d.from.y} V${d.from.y + (d.to.y - d.from.y) * 0.5} H${d.to.x} V${d.to.y}`; // Đường nối vuông góc
         })
         .attr('fill', 'none').attr('stroke', d => d.type === 'marry' ? CFG.colors.linkMarry : CFG.colors.linkBlood).attr('stroke-width', 2).attr('opacity', 0.7);
 
