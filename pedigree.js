@@ -1,12 +1,10 @@
 /* ============================================================
-   pedigree.js v10.1 — Bản rút gọn, sửa lỗi màn hình trắng
-   - Tự động Focus và phóng to (1.5x) khi mở.
-   - Chữ to 14px rõ ràng.
+   pedigree.js v10.2 — Bản sửa lỗi Auto-Zoom (Fallback Cụ Tổ)
    ============================================================ */
 (function () {
   'use strict';
   const LOG = '[Pedigree]';
-  console.log(LOG, '⭐ v10.1 loaded');
+  console.log(LOG, '⭐ v10.2 loaded');
 
   const CFG = {
     node:      { w: 200, h: 70 },
@@ -353,16 +351,26 @@
       zoomBehavior = d3.zoom().scaleExtent([CFG.zoom.min, CFG.zoom.max]).on('zoom', evt => { gRoot.attr('transform', evt.transform); currentScale = evt.transform.k; });
       svg.call(zoomBehavior);
 
-      // TỰ ĐỘNG ZOOM VÀO PHẠM VĂN MỸ
-      const target = nodeG.selectAll('g.node').filter(d => (d.person.full_name || '').trim() === CFG.focusName);
+      // ⭐ TỰ ĐỘNG ZOOM: Ưu tiên Phạm Văn Mỹ, nếu không có thì Zoom vào Cụ Tổ
+      let target = nodeG.selectAll('g.node').filter(d => (d.person.full_name || '').trim() === CFG.focusName);
+      
+      if (target.empty() && tree.roots.length > 0) {
+         // Fallback: Không tìm thấy Mỹ, zoom vào người đầu tiên của Đời 1
+         target = nodeG.selectAll('g.node').filter(d => String(d.person.id) === String(tree.roots[0].id));
+      }
+
       if (!target.empty()) {
          target.select('rect').attr('fill', CFG.colors.focus.fill).attr('filter', 'url(#focus-glow)');
          const d = target.datum();
-         const k = 1.5; // Zoom to 1.5x
+         const k = 1.5; // Hệ số zoom
          const centerX = d.x + CFG.node.w / 2; const centerY = d.y + CFG.node.h / 2;
          const svgW = svg.node().clientWidth || 1000; const svgH = svg.node().clientHeight || 800;
          const tx = svgW / 2 - centerX * k; const ty = svgH / 2 - centerY * k;
-         svg.transition().duration(800).call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(k));
+         
+         // Delay một chút để đảm bảo DOM đã render xong
+         setTimeout(() => {
+             svg.transition().duration(800).call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(k));
+         }, 100);
       }
     } catch (e) { console.error(LOG, 'render crash', e); }
   }
