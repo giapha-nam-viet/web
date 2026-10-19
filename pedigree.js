@@ -1,17 +1,19 @@
 /* ============================================================
-   pedigree.js v12.1 — Bản sửa lỗi dính khung & đường kẻ lơ lửng
+   pedigree.js v13.0 — Bản dứt điểm (Khoảng cách rộng & Diệt bóng ma)
+   - Tự động zoom vào Phạm Văn Mỹ
+   - Lọc bỏ những người bị mồ côi (không cha mẹ, vợ chồng, con cái)
    ============================================================ */
 (function () {
   'use strict';
   const LOG = '[Pedigree]';
-  console.log(LOG, '⭐ v12.1 loaded');
+  console.log(LOG, '⭐ v13.0 loaded');
 
   const CFG = {
     node:      { w: 180, h: 60 },
-    gapX:      50,                // Tăng khoảng cách ngang để không dính
-    gapY:      120,               // Tăng khoảng cách dọc
+    gapX:      50,                // Khoảng cách ngang
+    gapY:      100,               // Khoảng cách dọc
     padding:   60,
-    spouseGap: 15,
+    spouseGap: 20,                // ⭐ TĂNG KHOẢNG CÁCH VỢ/CHỒNG (Không bị dính)
     colors: {
       blood:  { stroke: '#88a9ad', fill: '#F5FAFA' },
       spouse: { stroke: '#b4c8ca', fill: '#F8FBFB' },
@@ -110,15 +112,27 @@
     });
     childrenOf.forEach((set, pid) => childrenOf.set(pid, Array.from(set)));
 
-    // Magnetic gom cụm
-    persons.forEach(p => {
+    // Lọc bỏ những người bị mồ côi (không cha mẹ, vợ chồng, con cái)
+    const cleanPersons = persons.filter(p => {
+       const pid = String(p.id);
+       const hasParents = parentsOf.has(pid);
+       const hasChildren = childrenOf.has(pid) && childrenOf.get(pid).length > 0;
+       const hasSpouses = spousesOf.has(pid) && spousesOf.get(pid).length > 0;
+       if (p.generation === 1) return true; // Cụ tổ luôn giữ lại
+       return hasParents || hasChildren || hasSpouses;
+    });
+    
+    const cleanById = new Map(cleanPersons.map(p => [String(p.id), p]));
+
+    // Magnetic gom cụm (tự động nối vợ chồng nếu bị thiếu)
+    cleanPersons.forEach(p => {
       const pid = String(p.id);
       if (!childrenOf.has(pid)) return;
-      childrenOf.get(pid).map(cid => byId.get(cid)).filter(Boolean).forEach(k => {
+      childrenOf.get(pid).map(cid => cleanById.get(cid)).filter(Boolean).forEach(k => {
         const kidId = String(k.id);
         if (childToMother.has(kidId)) {
           const momId = childToMother.get(kidId);
-          if (momId !== pid) {
+          if (momId !== pid && cleanById.has(momId)) {
              const sps = spousesOf.get(pid) || [];
              if (!sps.some(s => s.spouseId === momId)) {
                sps.push({ spouseId: momId, order: 99 }); spousesOf.set(pid, sps);
@@ -130,7 +144,7 @@
       });
     });
 
-    const rootsAll = persons.filter(p => !parentsOf.has(String(p.id)));
+    const rootsAll = cleanPersons.filter(p => !parentsOf.has(String(p.id)));
     rootsAll.sort((a, b) => (a.generation || 0) - (b.generation || 0));
     if (!rootsAll.length) return null;
     const minGen = rootsAll[0].generation || 1;
@@ -138,9 +152,9 @@
     if (!rootPersons.length) rootPersons.push(rootsAll[0]);
 
     const branchSet = new Set();
-    persons.forEach(p => { if (p.branch && p.branch.trim()) branchSet.add(p.branch.trim()); });
+    cleanPersons.forEach(p => { if (p.branch && p.branch.trim()) branchSet.add(p.branch.trim()); });
 
-    return { byId, childrenOf, parentsOf, spousesOf, roots: rootPersons, branches: Array.from(branchSet).sort(), minGen };
+    return { byId: cleanById, childrenOf, parentsOf, spousesOf, roots: rootPersons, branches: Array.from(branchSet).sort(), minGen };
   }
 
   function computeLayout(tree) {
@@ -318,7 +332,7 @@
         .attr('d', d => {
           if (d.type === 'marry') return `M${d.from.x},${d.from.y} L${d.to.x},${d.to.y}`;
           if (d.type === 'blood_straight') return `M${d.from.x},${d.from.y} V${d.from.y + (d.to.y - d.from.y) * 0.5} H${d.to.x} V${d.to.y}`;
-          return `M${d.from.x},${d.from.y} V${d.from.y + (d.to.y - d.from.y) * 0.5} H${d.to.x} V${d.to.y}`; // Đường nối vuông góc
+          return `M${d.from.x},${d.from.y} V${d.from.y + (d.to.y - d.from.y) * 0.5} H${d.to.x} V${d.to.y}`;
         })
         .attr('fill', 'none').attr('stroke', d => d.type === 'marry' ? CFG.colors.linkMarry : CFG.colors.linkBlood).attr('stroke-width', 2).attr('opacity', 0.7);
 
